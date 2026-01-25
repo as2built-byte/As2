@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ========================================
+    // Helper Functions
+    // ========================================
+    
+    // Check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Check if user is the owner of the document
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    // Check if user is an admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // ========================================
+    // Users Collection
+    // ========================================
+    match /users/{userId} {
+      // Users can read their own profile, admins can read all
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can create their own profile during registration
+      allow create: if isOwner(userId);
+      
+      // Users can update their own profile (except role and status)
+      // Admins can update any user (including role and status)
+      allow update: if isOwner(userId) || isAdmin();
+      
+      // Only admins can delete users
+      allow delete: if isAdmin();
+    }
+    
+    // ========================================
+    // Experts Collection
+    // ========================================
+    match /experts/{userId} {
+      // Authenticated users can read experts (for expert pool)
+      allow read: if isAuthenticated();
+      
+      // Experts can create/update their own profile
+      allow create, update: if isOwner(userId);
+      
+      // Only admins can delete expert profiles
+      allow delete: if isAdmin();
+    }
+    
+    // ========================================
+    // Enterprises Collection
+    // ========================================
+    match /enterprises/{userId} {
+      // Owner and admins can read enterprise data
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Enterprises can create/update their own profile
+      allow create, update: if isOwner(userId);
+      
+      // Only admins can delete enterprise profiles
+      allow delete: if isAdmin();
+    }
+  }
+}

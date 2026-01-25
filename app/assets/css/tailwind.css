@@ -1,0 +1,437 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ========================================
+   As2Built Design System
+   Professional UI/UX with refined colors
+   ======================================== */
+
+@layer base {
+  :root {
+    /* Brand Colors - Professional palette */
+    --color-primary: #2563EB;
+    --color-primary-dark: #1D4ED8;
+    --color-primary-light: #3B82F6;
+    --color-primary-subtle: #DBEAFE;
+
+    /* Accent Colors */
+    --color-accent: #0EA5E9;
+    --color-accent-dark: #0284C7;
+
+    /* Neutral Colors */
+    --color-dark: #0F172A;
+    --color-dark-light: #1E293B;
+    --color-gray-900: #111827;
+    --color-gray-700: #374151;
+    --color-gray-500: #6B7280;
+    --color-gray-400: #9CA3AF;
+    --color-gray-300: #D1D5DB;
+    --color-gray-100: #F3F4F6;
+    --color-white: #FFFFFF;
+
+    /* Status Colors */
+    --color-success: #059669;
+    --color-success-light: #D1FAE5;
+    --color-warning: #D97706;
+    --color-warning-light: #FEF3C7;
+    --color-error: #DC2626;
+    --color-error-light: #FEE2E2;
+    --color-info: #0284C7;
+    --color-info-light: #E0F2FE;
+
+    /* Gradients */
+    --gradient-dark: linear-gradient(145deg, #0F172A 0%, #1E293B 50%, #0F172A 100%);
+    --gradient-primary: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+    --gradient-accent: linear-gradient(135deg, #0EA5E9 0%, #2563EB 100%);
+  }
+
+  body {
+    @apply font-sans antialiased text-gray-800 bg-slate-50;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+}
+
+@layer components {
+  /* ========================================
+       Button Styles - Professional
+       ======================================== */
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2.5 px-6 py-3 font-semibold text-sm rounded-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none;
+  }
+
+  .btn-primary {
+    @apply btn text-white shadow-lg hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0;
+    background: var(--gradient-primary);
+    box-shadow: 0 4px 14px 0 rgba(37, 99, 235, 0.35);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    box-shadow: 0 6px 20px 0 rgba(37, 99, 235, 0.45);
+  }
+
+  .btn-primary:focus {
+    @apply ring-blue-500;
+  }
+
+  .btn-secondary {
+    @apply btn bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 focus:ring-slate-400 shadow-sm;
+  }
+
+  .btn-outline {
+    @apply btn border-2 border-blue-500 text-blue-600 bg-transparent hover:bg-blue-50 focus:ring-blue-500;
+  }
+
+  .btn-ghost {
+    @apply btn text-slate-600 hover:bg-slate-100 focus:ring-slate-400;
+  }
+
+  .btn-lg {
+    @apply px-8 py-3.5 text-base;
+  }
+
+  .btn-sm {
+    @apply px-4 py-2 text-sm;
+  }
+
+  /* ========================================
+       Input Styles - Enhanced
+       ======================================== */
+
+  .input-group {
+    @apply flex flex-col gap-1.5;
+  }
+
+  .input-label {
+    @apply text-sm font-medium text-slate-700;
+  }
+
+  .input-wrapper {
+    @apply relative flex items-center;
+  }
+
+  .input-icon {
+    @apply absolute left-4 w-5 h-5 text-slate-400 pointer-events-none transition-colors;
+  }
+
+  .input {
+    @apply w-full px-4 py-3 text-slate-800 bg-white border border-slate-200 rounded-xl transition-all duration-200 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 placeholder:text-slate-400;
+    font-size: 15px;
+  }
+
+  .input-with-icon {
+    @apply pl-12;
+  }
+
+  .input-with-action {
+    @apply pr-12;
+  }
+
+  .input-action {
+    @apply absolute right-3 p-1.5 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-blue-500 rounded-lg transition-colors;
+  }
+
+  .input:focus~.input-icon,
+  .input:focus+.input-icon {
+    @apply text-blue-500;
+  }
+
+  .input-error {
+    @apply border-red-400 focus:border-red-500 focus:ring-red-500/10;
+  }
+
+  .input-hint {
+    @apply text-xs text-slate-500;
+  }
+
+  .input-error-message {
+    @apply text-xs text-red-500 font-medium mt-1;
+  }
+
+  /* Phone Input with Prefix */
+  .phone-prefix {
+    @apply absolute left-4 text-slate-600 font-semibold text-sm pointer-events-none select-none;
+  }
+
+  .phone-input {
+    @apply pl-16;
+  }
+
+  /* ========================================
+       Card Styles - Premium
+       ======================================== */
+
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-slate-100/80;
+  }
+
+  .card-glass {
+    @apply rounded-2xl shadow-2xl border border-white/30;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(20px);
+  }
+
+  .card-hover {
+    @apply card transition-all duration-300 hover:shadow-xl hover:-translate-y-1.5 hover:border-blue-100 cursor-pointer;
+  }
+
+  /* ========================================
+       Auth Page Styles - Professional
+       ======================================== */
+
+  .auth-container {
+    @apply min-h-screen flex items-center justify-center p-6;
+    background: var(--gradient-dark);
+  }
+
+  .auth-card {
+    @apply w-full max-w-md card-glass p-8 sm:p-10;
+  }
+
+  .auth-logo {
+    @apply w-20 h-20 mx-auto mb-8 rounded-2xl overflow-hidden shadow-lg ring-4 ring-white/20;
+  }
+
+  .auth-title {
+    @apply text-2xl font-bold text-center text-slate-800 mb-2;
+  }
+
+  .auth-subtitle {
+    @apply text-slate-500 text-center mb-8;
+  }
+
+  .auth-form {
+    @apply flex flex-col gap-5;
+  }
+
+  .auth-divider {
+    @apply flex items-center gap-4 my-8;
+  }
+
+  .auth-divider::before,
+  .auth-divider::after {
+    content: '';
+    @apply flex-1 h-px bg-slate-200;
+  }
+
+  .auth-divider-text {
+    @apply text-sm text-slate-400 uppercase tracking-wider;
+  }
+
+  .auth-link {
+    @apply text-blue-600 hover:text-blue-700 font-semibold transition-colors;
+  }
+
+  /* ========================================
+       Alert Styles - Enhanced
+       ======================================== */
+
+  .alert {
+    @apply p-4 rounded-xl flex items-start gap-3 text-sm;
+  }
+
+  .alert-error {
+    @apply alert bg-red-50 text-red-700 border border-red-100;
+  }
+
+  .alert-success {
+    @apply alert bg-emerald-50 text-emerald-700 border border-emerald-100;
+  }
+
+  .alert-warning {
+    @apply alert bg-amber-50 text-amber-700 border border-amber-100;
+  }
+
+  .alert-info {
+    @apply alert bg-sky-50 text-sky-700 border border-sky-100;
+  }
+
+  /* Compact error for inline display */
+  .alert-error-compact {
+    @apply py-2.5 px-3 rounded-lg flex items-center gap-2 text-sm bg-red-50 text-red-600 border border-red-100;
+  }
+
+  /* ========================================
+       Role Selection Cards - Premium
+       ======================================== */
+
+  .role-card {
+    @apply card-hover p-8 text-center bg-white;
+  }
+
+  .role-card-icon {
+    @apply w-20 h-20 mx-auto mb-5 rounded-2xl flex items-center justify-center transition-transform duration-300;
+  }
+
+  .role-card:hover .role-card-icon {
+    @apply scale-110;
+  }
+
+  .role-card-title {
+    @apply text-xl font-bold text-slate-800 mb-2;
+  }
+
+  .role-card-description {
+    @apply text-slate-500 text-sm leading-relaxed;
+  }
+
+  /* ========================================
+       Pending Status Page
+       ======================================== */
+
+  .pending-container {
+    @apply min-h-screen flex items-center justify-center p-6 bg-slate-50;
+  }
+
+  .pending-card {
+    @apply card p-8 sm:p-10 text-center max-w-lg shadow-xl;
+  }
+
+  .pending-icon {
+    @apply w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center;
+    background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+  }
+
+  .pending-title {
+    @apply text-2xl font-bold text-slate-800 mb-4;
+  }
+
+  .pending-message {
+    @apply text-slate-600 mb-6 leading-relaxed;
+  }
+
+  .pending-info {
+    @apply bg-slate-50 rounded-xl p-5 text-left space-y-3 mb-6 border border-slate-100;
+  }
+
+  .pending-info-row {
+    @apply flex justify-between text-sm;
+  }
+
+  .pending-info-label {
+    @apply text-slate-500;
+  }
+
+  .pending-info-value {
+    @apply font-semibold text-slate-800;
+  }
+
+  /* ========================================
+       Loading Spinner - Smooth
+       ======================================== */
+
+  .spinner {
+    @apply animate-spin rounded-full border-2 border-current border-t-transparent;
+  }
+
+  .spinner-sm {
+    @apply spinner w-4 h-4;
+  }
+
+  .spinner-md {
+    @apply spinner w-6 h-6;
+  }
+
+  .spinner-lg {
+    @apply spinner w-8 h-8;
+  }
+
+  /* ========================================
+       Form Sections
+       ======================================== */
+
+  .form-section {
+    @apply space-y-5;
+  }
+
+  .form-row {
+    @apply grid grid-cols-1 sm:grid-cols-2 gap-4;
+  }
+
+  .form-header {
+    @apply flex items-center gap-4 mb-8;
+  }
+
+  .form-header-icon {
+    @apply w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0;
+  }
+
+  .form-header-title {
+    @apply text-xl font-bold text-slate-800;
+  }
+
+  .form-header-subtitle {
+    @apply text-slate-500 text-sm;
+  }
+}
+
+@layer utilities {
+
+  /* Animation utilities */
+  .fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .slide-up {
+    animation: slideUp 0.5s ease-out;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .scale-in {
+    animation: scaleIn 0.3s ease-out;
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}

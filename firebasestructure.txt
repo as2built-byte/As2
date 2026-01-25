@@ -1,0 +1,21 @@
+on a une base de donnee firebase avec AUTHENTICATION email et mot de passe active et les collections suivantes
+users
+  └── {uid}
+      - role: "enterprise" | "expert" | "admin"
+      - email
+      - firstName
+      - lastName
+      - phone
+      - createdAt
+      - status: "active" |"pending"| "inactive"
+experts
+  └── {uid}
+      - certifications: [] // vide par defaut rempli apres completer des formation
+      - cvUrl
+      - availability //true par defaut 
+      - createdAt
+enterprises
+  └── {uid}
+      - companyName
+      - createdAt
+
