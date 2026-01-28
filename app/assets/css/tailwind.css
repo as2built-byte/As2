@@ -150,6 +150,19 @@
     @apply absolute right-3 p-1.5 text-slate-400 hover:text-slate-600 focus:outline-none focus:text-blue-500 rounded-lg transition-colors;
   }
 
+  /* Hide browser's default password reveal button */
+  input[type="password"]::-ms-reveal,
+  input[type="password"]::-ms-clear {
+    display: none;
+  }
+
+  input[type="password"]::-webkit-credentials-auto-fill-button,
+  input[type="password"]::-webkit-textfield-decoration-container {
+    visibility: hidden;
+    pointer-events: none;
+    position: absolute;
+  }
+
   .input:focus~.input-icon,
   .input:focus+.input-icon {
     @apply text-blue-500;
@@ -174,6 +187,28 @@
 
   .phone-input {
     @apply pl-16;
+  }
+
+  /* File Upload Component */
+  .file-upload-wrapper {
+    @apply relative flex items-center gap-2;
+  }
+
+  .file-upload-btn {
+    @apply flex-1 flex items-center gap-3 px-4 py-3 text-slate-600 bg-white border border-slate-200 rounded-xl transition-all duration-200 hover:border-slate-300 hover:bg-slate-50 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 cursor-pointer text-left;
+    font-size: 15px;
+  }
+
+  .file-upload-btn-error {
+    @apply border-red-400 hover:border-red-400;
+  }
+
+  .file-upload-btn-success {
+    @apply border-emerald-400 bg-emerald-50 text-emerald-700 hover:border-emerald-500 hover:bg-emerald-50;
+  }
+
+  .file-remove-btn {
+    @apply p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-red-500/20;
   }
 
   /* ========================================
@@ -204,27 +239,27 @@
   }
 
   .auth-card {
-    @apply w-full max-w-md card-glass p-8 sm:p-10;
+    @apply w-full max-w-sm card-glass p-6 sm:p-8;
   }
 
   .auth-logo {
-    @apply w-20 h-20 mx-auto mb-8 rounded-2xl overflow-hidden shadow-lg ring-4 ring-white/20;
+    @apply w-16 h-16 mx-auto mb-6 rounded-2xl overflow-hidden shadow-lg ring-4 ring-white/20;
   }
 
   .auth-title {
-    @apply text-2xl font-bold text-center text-slate-800 mb-2;
+    @apply text-xl font-bold text-center text-slate-800 mb-2;
   }
 
   .auth-subtitle {
-    @apply text-slate-500 text-center mb-8;
+    @apply text-slate-500 text-center text-sm mb-6;
   }
 
   .auth-form {
-    @apply flex flex-col gap-5;
+    @apply flex flex-col gap-4;
   }
 
   .auth-divider {
-    @apply flex items-center gap-4 my-8;
+    @apply flex items-center gap-4 my-6;
   }
 
   .auth-divider::before,

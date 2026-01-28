@@ -58,8 +58,8 @@ async function handleLogout() {
             <!-- Message -->
             <p class="pending-message">
                 Votre compte a été créé avec succès et est actuellement en cours d'examen 
-                par notre équipe d'administration. Vous recevrez une notification dès que 
-                votre compte sera activé.
+                par notre équipe d'administration. Vous pouvez vous déconnecter et vous 
+                reconnecter une fois votre compte activé.
             </p>
 
             <!-- Account Info -->

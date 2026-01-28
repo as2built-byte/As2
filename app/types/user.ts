@@ -12,7 +12,7 @@
 export type UserRole = 'enterprise' | 'expert' | 'admin'
 
 /** User account status */
-export type UserStatus = 'active' | 'pending' | 'inactive'
+export type UserStatus = 'active' | 'pending' | 'inactive' | 'rejected'
 
 // ========================================
 // Base User Interface
@@ -85,6 +85,7 @@ export interface ExpertRegistrationForm {
     firstName: string
     lastName: string
     phone: string
+    cvFile: File | null
 }
 
 /** Enterprise registration form data */
@@ -108,3 +109,32 @@ export interface AuthState {
     loading: boolean
     error: string | null
 }
+
+// ========================================
+// Admin Types
+// ========================================
+
+/** User with details for admin view (conditionally loaded) */
+export interface UserWithDetails extends UserProfile {
+    expertProfile?: ExpertProfile
+    enterpriseProfile?: EnterpriseProfile
+}
+
+/** Admin dashboard statistics */
+export interface AdminDashboardStats {
+    totalUsers: number
+    pendingUsers: number
+    totalExperts: number
+    totalEnterprises: number
+}
+
+/** Admin store state */
+export interface AdminState {
+    users: UserWithDetails[]
+    usersLoading: boolean
+    usersError: string | null
+    userRoleFilter: 'all' | 'expert' | 'enterprise'
+    userStatusFilter: 'all' | UserStatus
+    stats: AdminDashboardStats
+}
+

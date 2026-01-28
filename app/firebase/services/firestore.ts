@@ -26,7 +26,9 @@ import type {
     ExpertProfile,
     CreateExpertData,
     EnterpriseProfile,
-    CreateEnterpriseData
+    CreateEnterpriseData,
+    UserStatus,
+    UserWithDetails
 } from '~/types'
 
 let firestoreInstance: Firestore | null = null
@@ -241,3 +243,93 @@ export async function getEnterpriseProfile(uid: string): Promise<EnterpriseProfi
         createdAt: data.createdAt?.toDate() || new Date(),
     } as EnterpriseProfile
 }
+
+// ========================================
+// Admin Functions
+// ========================================
+
+/**
+ * Get all users (experts and enterprises only, excludes admins)
+ * Admin only function
+ */
+export async function getAllUsers(): Promise<UserProfile[]> {
+    const db = getFirebaseFirestore()
+    const usersRef = collection(db, COLLECTIONS.USERS)
+    const q = query(usersRef, where('role', 'in', ['expert', 'enterprise']))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            uid: docSnap.id,
+            email: data.email,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            phone: data.phone,
+            role: data.role,
+            status: data.status,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as UserProfile
+    })
+}
+
+/**
+ * Get users by status (excludes admins)
+ * @param status Status to filter by
+ */
+export async function getUsersByStatus(status: UserStatus): Promise<UserProfile[]> {
+    const db = getFirebaseFirestore()
+    const usersRef = collection(db, COLLECTIONS.USERS)
+    const q = query(
+        usersRef,
+        where('role', 'in', ['expert', 'enterprise']),
+        where('status', '==', status)
+    )
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            uid: docSnap.id,
+            email: data.email,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            phone: data.phone,
+            role: data.role,
+            status: data.status,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as UserProfile
+    })
+}
+
+/**
+ * Update user status (admin only)
+ * @param uid User ID
+ * @param status New status
+ */
+export async function updateUserStatus(uid: string, status: UserStatus): Promise<void> {
+    const db = getFirebaseFirestore()
+    const userRef = doc(db, COLLECTIONS.USERS, uid)
+    await updateDoc(userRef, { status })
+}
+
+/**
+ * Get user with details (conditionally loads expert or enterprise profile)
+ * @param uid User ID
+ */
+export async function getUserWithDetails(uid: string): Promise<UserWithDetails | null> {
+    const userProfile = await getUserProfile(uid)
+    if (!userProfile) return null
+
+    const userWithDetails: UserWithDetails = { ...userProfile }
+
+    // Conditional loading based on role
+    if (userProfile.role === 'expert') {
+        userWithDetails.expertProfile = await getExpertProfile(uid) || undefined
+    } else if (userProfile.role === 'enterprise') {
+        userWithDetails.enterpriseProfile = await getEnterpriseProfile(uid) || undefined
+    }
+
+    return userWithDetails
+}
+

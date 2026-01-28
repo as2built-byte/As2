@@ -7,7 +7,22 @@
  */
 
 const nuxtApp = useNuxtApp()
+
 const isLoading = ref(true)
+
+// Asset imports
+import favicon from '~/assets/images/logo.jpeg'
+
+// App Metadata
+useHead({
+    title: 'As2Built',
+    meta: [
+        { name: 'description', content: 'Plateforme de mise en relation Experts BIM et Entreprises' }
+    ],
+    link: [
+        { rel: 'icon', type: 'image/jpeg', href: favicon }
+    ]
+})
 
 // Wait for app to be fully mounted
 onMounted(() => {
@@ -51,7 +66,9 @@ nuxtApp.hook('app:mounted', () => {
         :class="{ 'opacity-0': isLoading, 'opacity-100': !isLoading }"
         class="transition-opacity duration-300"
     >
-        <NuxtPage />
+        <NuxtLayout>
+            <NuxtPage />
+        </NuxtLayout>
     </div>
 </template>
 

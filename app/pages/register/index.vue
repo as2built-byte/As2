@@ -44,7 +44,7 @@ onMounted(() => {
                     </div>
                     <h2 class="role-card-title">Expert BIM</h2>
                     <p class="role-card-description">
-                        Vous êtes un professionnel BIM à la recherche de missions et d'opportunités de collaboration
+                        Accédez aux formations certifiantes, proposez vos compétences aux entreprises et participez à des missions BIM
                     </p>
                     <div class="mt-6 text-blue-600 text-sm font-semibold inline-flex items-center gap-2 group-hover:gap-3 transition-all">
                         <span>Continuer</span>
@@ -59,7 +59,7 @@ onMounted(() => {
                     </div>
                     <h2 class="role-card-title">Entreprise</h2>
                     <p class="role-card-description">
-                        Vous représentez une entreprise de construction à la recherche d'experts BIM certifiés
+                        Recrutez des experts certifiés, gérez vos projets et bénéficiez d'audits digitaux BIM personnalisés
                     </p>
                     <div class="mt-6 text-emerald-600 text-sm font-semibold inline-flex items-center gap-2 group-hover:gap-3 transition-all">
                         <span>Continuer</span>

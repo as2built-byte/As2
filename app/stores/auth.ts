@@ -25,6 +25,7 @@ import {
     createEnterpriseProfile,
     isPhoneRegistered
 } from '~/firebase/services/firestore'
+import { uploadExpertCV } from '~/firebase/services/storage'
 
 export const useAuthStore = defineStore('auth', {
     state: (): AuthState => ({
@@ -167,6 +168,12 @@ export const useAuthStore = defineStore('auth', {
                 const credential = await signUpWithEmail(form.email, form.password)
                 const uid = credential.user.uid
 
+                // Upload CV if provided
+                let cvUrl: string | null = null
+                if (form.cvFile) {
+                    cvUrl = await uploadExpertCV(uid, form.cvFile)
+                }
+
                 // Create user profile in Firestore (no displayName)
                 await createUserProfile(uid, {
                     email: form.email,
@@ -177,9 +184,9 @@ export const useAuthStore = defineStore('auth', {
                     status: 'pending',
                 })
 
-                // Create expert profile
+                // Create expert profile with CV URL
                 await createExpertProfile(uid, {
-                    cvUrl: null,
+                    cvUrl,
                 })
 
                 // Sign out after registration (user needs approval)

@@ -31,7 +31,14 @@ const form = reactive({
     password: '',
     confirmPassword: '',
     phoneNumber: '',
+    cvFile: null as File | null,
 })
+
+// CV file input ref
+const cvInputRef = ref<HTMLInputElement | null>(null)
+
+// CV file name for display
+const cvFileName = computed(() => form.cvFile?.name || '')
 
 // Password visibility
 const showPassword = ref(false)
@@ -45,7 +52,11 @@ const formErrors = reactive({
     password: '',
     confirmPassword: '',
     phoneNumber: '',
+    cvFile: '',
 })
+
+// Max file size: 5MB
+const MAX_CV_SIZE = 5 * 1024 * 1024
 
 // Format phone number (remove non-digits and limit to 9)
 function formatPhoneInput(event: Event) {
@@ -67,6 +78,43 @@ function scrollToError() {
     nextTick(() => {
         errorAlertRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
+}
+
+// Handle CV file selection
+function handleFileChange(event: Event) {
+    const input = event.target as HTMLInputElement
+    const file = input.files?.[0]
+    
+    if (!file) {
+        form.cvFile = null
+        return
+    }
+    
+    // Validate file type
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        formErrors.cvFile = 'Seuls les fichiers PDF sont acceptés'
+        input.value = ''
+        return
+    }
+    
+    // Validate file size
+    if (file.size > MAX_CV_SIZE) {
+        formErrors.cvFile = 'Le fichier ne doit pas dépasser 5 MB'
+        input.value = ''
+        return
+    }
+    
+    formErrors.cvFile = ''
+    form.cvFile = file
+}
+
+// Remove selected CV file
+function removeFile() {
+    form.cvFile = null
+    formErrors.cvFile = ''
+    if (cvInputRef.value) {
+        cvInputRef.value.value = ''
+    }
 }
 
 // Validate form
@@ -128,6 +176,12 @@ function validateForm(): boolean {
         isValid = false
     }
 
+    // CV validation (required)
+    if (!form.cvFile) {
+        formErrors.cvFile = 'Le CV est requis'
+        isValid = false
+    }
+
     return isValid
 }
 
@@ -146,6 +200,7 @@ async function handleSubmit() {
             firstName: form.firstName.trim(),
             lastName: form.lastName.trim(),
             phone: getFullPhoneNumber(),
+            cvFile: form.cvFile,
         })
         
         if (success) {
@@ -277,6 +332,45 @@ async function handleSubmit() {
                     </div>
                     <span v-if="formErrors.phoneNumber" class="input-error-message">
                         {{ formErrors.phoneNumber }}
+                    </span>
+                </div>
+
+                <!-- CV Upload -->
+                <div class="input-group">
+                    <label for="cvFile" class="input-label">
+                        CV (PDF) <span class="text-red-500">*</span>
+                    </label>
+                    <div class="file-upload-wrapper">
+                        <input
+                            ref="cvInputRef"
+                            id="cvFile"
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            class="hidden"
+                            @change="handleFileChange"
+                        />
+                        <button 
+                            type="button"
+                            class="file-upload-btn"
+                            :class="{ 'file-upload-btn-error': formErrors.cvFile, 'file-upload-btn-success': form.cvFile }"
+                            @click="cvInputRef?.click()"
+                        >
+                            <Icon :name="form.cvFile ? 'heroicons:document-check' : 'heroicons:document-arrow-up'" class="w-5 h-5" />
+                            <span class="truncate">{{ cvFileName || 'Sélectionner votre CV' }}</span>
+                        </button>
+                        <button 
+                            v-if="form.cvFile"
+                            type="button"
+                            class="file-remove-btn"
+                            @click="removeFile"
+                            title="Supprimer le fichier"
+                        >
+                            <Icon name="heroicons:x-mark" class="w-5 h-5" />
+                        </button>
+                    </div>
+                    <span class="input-hint">Format PDF uniquement, max 5 MB</span>
+                    <span v-if="formErrors.cvFile" class="input-error-message">
+                        {{ formErrors.cvFile }}
                     </span>
                 </div>
 
