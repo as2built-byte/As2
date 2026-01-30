@@ -38,7 +38,7 @@ const navigation = {
     ],
     content: [
         { path: '/admin/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: true },
-        { path: '/admin/formations', label: 'Formations', icon: 'heroicons:academic-cap', disabled: true },
+        { path: '/admin/formations', label: 'Formations', icon: 'heroicons:academic-cap', disabled: false },
         { path: '/admin/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
     ],
     finance: [
@@ -165,16 +165,29 @@ function closeUserMenu() {
                         Contenu
                     </p>
                     <div class="space-y-1">
-                        <div 
-                            v-for="item in navigation.content" 
-                            :key="item.path"
-                            class="nav-item nav-item-disabled"
-                            :title="sidebarCollapsed ? item.label : undefined"
-                        >
-                            <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
-                            <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
-                            <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
-                        </div>
+                        <template v-for="item in navigation.content" :key="item.path">
+                            <!-- Active link -->
+                            <NuxtLink 
+                                v-if="!item.disabled"
+                                :to="item.path"
+                                class="nav-item"
+                                :class="{ 'nav-item-active': isActive(item) }"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed">{{ item.label }}</span>
+                            </NuxtLink>
+                            <!-- Disabled item -->
+                            <div 
+                                v-else
+                                class="nav-item nav-item-disabled"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
+                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
+                            </div>
+                        </template>
                     </div>
                 </div>
 

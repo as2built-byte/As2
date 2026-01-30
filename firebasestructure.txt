@@ -19,3 +19,29 @@ enterprises
       - companyName
       - createdAt
 
+formations
+  └── {formationId}
+      - title: "BIM Architecture – Fondamentaux"
+      - description: "Apprendre les bases du BIM et Revit"
+      - durationHours: 14
+      - price: 40000 // en DZD
+      - isActive: true
+      - coverUrl: "" //le user aploader cet image selon un bon controle 
+      - createdAt
+      - updatedAt
+
+packs
+  └── {packId}
+      - title: "Pack BIM Complet"
+      - formationIds: []
+      - price: 90000 // en DZD
+      - createdAt
+      - updatedAt
+      // Note: isActive est calculé côté client - un pack est inactif si une de ses formations est inactive
+
+payments
+  └── {paymentId}
+      - userId
+      - itemType: "formation" | "pack" | "audit"
+      - itemId
+      - createdAt

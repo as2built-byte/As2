@@ -38,6 +38,7 @@ export function getFirebaseStorage(): FirebaseStorage {
 
 export const STORAGE_PATHS = {
     EXPERT_CVS: 'experts/cv',
+    FORMATION_COVERS: 'formations/covers',
 } as const
 
 // ========================================
@@ -106,3 +107,69 @@ export async function getFileDownloadUrl(filePath: string): Promise<string> {
     return getDownloadURL(fileRef)
 }
 
+// ========================================
+// Formation Cover Upload
+// ========================================
+
+/**
+ * Upload a formation cover image
+ * @param formationId Formation ID
+ * @param file Image file to upload (jpg, png, webp)
+ * @returns Download URL of the uploaded image
+ */
+export async function uploadFormationCover(
+    formationId: string,
+    file: File
+): Promise<string> {
+    const storage = getFirebaseStorage()
+
+    // Get file extension
+    const extension = file.name.split('.').pop()?.toLowerCase() || 'jpg'
+    const timestamp = Date.now()
+    const filename = `cover_${timestamp}.${extension}`
+    const filePath = `${STORAGE_PATHS.FORMATION_COVERS}/${formationId}/${filename}`
+
+    // Create storage reference
+    const storageRef = ref(storage, filePath)
+
+    // Set metadata
+    const metadata: UploadMetadata = {
+        contentType: file.type || 'image/jpeg',
+        customMetadata: {
+            formationId,
+            uploadedAt: new Date().toISOString(),
+        }
+    }
+
+    // Upload file
+    await uploadBytes(storageRef, file, metadata)
+
+    // Get and return download URL
+    const downloadUrl = await getDownloadURL(storageRef)
+    return downloadUrl
+}
+
+/**
+ * Delete a formation cover image by URL
+ * Extracts the path from the download URL and deletes the file
+ * @param coverUrl The download URL of the cover image
+ */
+export async function deleteFormationCoverByUrl(coverUrl: string): Promise<void> {
+    if (!coverUrl) return
+
+    const storage = getFirebaseStorage()
+
+    try {
+        // Extract the path from the download URL
+        // Firebase Storage URLs contain the path after /o/ and before ?
+        const urlPath = decodeURIComponent(coverUrl.split('/o/')[1]?.split('?')[0] || '')
+
+        if (urlPath) {
+            const fileRef = ref(storage, urlPath)
+            await deleteObject(fileRef)
+        }
+    } catch (error) {
+        // Log but don't throw - cover might already be deleted or URL invalid
+        console.warn('Could not delete formation cover:', error)
+    }
+}

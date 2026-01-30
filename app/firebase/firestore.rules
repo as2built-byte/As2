@@ -68,5 +68,42 @@ service cloud.firestore {
       // Only admins can delete enterprise profiles
       allow delete: if isAdmin();
     }
+    
+    // ========================================
+    // Formations Collection
+    // ========================================
+    match /formations/{formationId} {
+      // Anyone authenticated can read formations
+      allow read: if isAuthenticated();
+      
+      // Only admins can create, update, delete formations
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // ========================================
+    // Packs Collection
+    // ========================================
+    match /packs/{packId} {
+      // Anyone authenticated can read packs
+      allow read: if isAuthenticated();
+      
+      // Only admins can create, update, delete packs
+      allow create, update, delete: if isAdmin();
+    }
+    
+    // ========================================
+    // Payments Collection
+    // ========================================
+    match /payments/{paymentId} {
+      // Admins can read all payments
+      allow read: if isAdmin();
+      
+      // Users can read their own payments
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      
+      // Only admins can create, update, delete payments
+      allow create, update, delete: if isAdmin();
+    }
   }
 }
+

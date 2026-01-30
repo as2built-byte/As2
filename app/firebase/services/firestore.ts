@@ -2,7 +2,7 @@
  * Firebase Firestore Service
  * 
  * Provides Firestore database functionality for As2Built.
- * Collections: users, experts, enterprises
+ * Collections: users, experts, enterprises, formations, packs
  */
 
 import {
@@ -11,11 +11,13 @@ import {
     getDoc,
     setDoc,
     updateDoc,
+    deleteDoc,
     serverTimestamp,
     collection,
     query,
     where,
     getDocs,
+    addDoc,
     type Firestore,
     type DocumentData
 } from 'firebase/firestore'
@@ -28,7 +30,13 @@ import type {
     EnterpriseProfile,
     CreateEnterpriseData,
     UserStatus,
-    UserWithDetails
+    UserWithDetails,
+    Formation,
+    CreateFormationData,
+    UpdateFormationData,
+    Pack,
+    CreatePackData,
+    UpdatePackData
 } from '~/types'
 
 let firestoreInstance: Firestore | null = null
@@ -54,6 +62,8 @@ export const COLLECTIONS = {
     USERS: 'users',
     EXPERTS: 'experts',
     ENTERPRISES: 'enterprises',
+    FORMATIONS: 'formations',
+    PACKS: 'packs',
 } as const
 
 // ========================================
@@ -333,3 +343,227 @@ export async function getUserWithDetails(uid: string): Promise<UserWithDetails |
     return userWithDetails
 }
 
+// ========================================
+// Formation Functions
+// ========================================
+
+/**
+ * Get all formations
+ */
+export async function getAllFormations(): Promise<Formation[]> {
+    const db = getFirebaseFirestore()
+    const formationsRef = collection(db, COLLECTIONS.FORMATIONS)
+    const querySnapshot = await getDocs(formationsRef)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            title: data.title,
+            description: data.description,
+            durationHours: data.durationHours,
+            price: data.price,
+            isActive: data.isActive ?? true,
+            coverUrl: data.coverUrl || null,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Formation
+    })
+}
+
+/**
+ * Get a single formation by ID
+ */
+export async function getFormation(id: string): Promise<Formation | null> {
+    const db = getFirebaseFirestore()
+    const formationRef = doc(db, COLLECTIONS.FORMATIONS, id)
+    const formationSnap = await getDoc(formationRef)
+
+    if (!formationSnap.exists()) {
+        return null
+    }
+
+    const data = formationSnap.data()
+    return {
+        id: formationSnap.id,
+        title: data.title,
+        description: data.description,
+        durationHours: data.durationHours,
+        price: data.price,
+        isActive: data.isActive ?? true,
+        coverUrl: data.coverUrl || null,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+    } as Formation
+}
+
+/**
+ * Create a new formation
+ */
+export async function createFormation(data: CreateFormationData): Promise<string> {
+    const db = getFirebaseFirestore()
+    const formationsRef = collection(db, COLLECTIONS.FORMATIONS)
+
+    const docRef = await addDoc(formationsRef, {
+        title: data.title,
+        description: data.description,
+        durationHours: data.durationHours,
+        price: data.price,
+        isActive: data.isActive,
+        coverUrl: data.coverUrl || null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Update a formation
+ */
+export async function updateFormation(id: string, data: UpdateFormationData): Promise<void> {
+    const db = getFirebaseFirestore()
+    const formationRef = doc(db, COLLECTIONS.FORMATIONS, id)
+
+    await updateDoc(formationRef, {
+        ...data,
+        updatedAt: serverTimestamp(),
+    } as DocumentData)
+}
+
+/**
+ * Delete a formation
+ */
+export async function deleteFormation(id: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const formationRef = doc(db, COLLECTIONS.FORMATIONS, id)
+    await deleteDoc(formationRef)
+}
+
+// ========================================
+// Pack Functions
+// ========================================
+
+/**
+ * Get all packs
+ */
+export async function getAllPacks(): Promise<Pack[]> {
+    const db = getFirebaseFirestore()
+    const packsRef = collection(db, COLLECTIONS.PACKS)
+    const querySnapshot = await getDocs(packsRef)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            title: data.title,
+            formationIds: data.formationIds || [],
+            price: data.price,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Pack
+    })
+}
+
+/**
+ * Get a single pack by ID
+ */
+export async function getPack(id: string): Promise<Pack | null> {
+    const db = getFirebaseFirestore()
+    const packRef = doc(db, COLLECTIONS.PACKS, id)
+    const packSnap = await getDoc(packRef)
+
+    if (!packSnap.exists()) {
+        return null
+    }
+
+    const data = packSnap.data()
+    return {
+        id: packSnap.id,
+        title: data.title,
+        formationIds: data.formationIds || [],
+        price: data.price,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+    } as Pack
+}
+
+/**
+ * Create a new pack
+ */
+export async function createPack(data: CreatePackData): Promise<string> {
+    const db = getFirebaseFirestore()
+    const packsRef = collection(db, COLLECTIONS.PACKS)
+
+    const docRef = await addDoc(packsRef, {
+        title: data.title,
+        formationIds: data.formationIds,
+        price: data.price,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Update a pack
+ */
+export async function updatePack(id: string, data: UpdatePackData): Promise<void> {
+    const db = getFirebaseFirestore()
+    const packRef = doc(db, COLLECTIONS.PACKS, id)
+
+    await updateDoc(packRef, {
+        ...data,
+        updatedAt: serverTimestamp(),
+    } as DocumentData)
+}
+
+/**
+ * Delete a pack
+ */
+export async function deletePack(id: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const packRef = doc(db, COLLECTIONS.PACKS, id)
+    await deleteDoc(packRef)
+}
+
+// ========================================
+// Formation Buyers (Payments)
+// ========================================
+
+/**
+ * Get all users who purchased a specific formation
+ * @param formationId Formation ID
+ * @returns Array of user profiles who purchased the formation
+ */
+export async function getFormationBuyers(formationId: string): Promise<UserProfile[]> {
+    const db = getFirebaseFirestore()
+
+    // Query payments for this formation
+    const paymentsRef = collection(db, 'payments')
+    const q = query(
+        paymentsRef,
+        where('itemType', '==', 'formation'),
+        where('itemId', '==', formationId)
+    )
+    const paymentsSnapshot = await getDocs(q)
+
+    if (paymentsSnapshot.empty) {
+        return []
+    }
+
+    // Get unique user IDs
+    const userIds = [...new Set(paymentsSnapshot.docs.map(doc => doc.data().userId as string))]
+
+    // Fetch user profiles
+    const users: UserProfile[] = []
+    for (const userId of userIds) {
+        const userProfile = await getUserProfile(userId)
+        if (userProfile) {
+            users.push(userProfile)
+        }
+    }
+
+    return users
+}
