@@ -10,15 +10,18 @@ definePageMeta({
     middleware: ['auth'],
 })
 
-import { getFormation, getFormationBuyers } from '~/firebase/services/firestore'
-import type { Formation, UserProfile } from '~/types'
+import { getFormation, getFormationBuyers, type FormationBuyer } from '~/firebase/services/firestore'
+import { addCertification, getUserCertifications } from '~/services/formationsClient'
+import type { Formation } from '~/types'
 
 const route = useRoute()
 const router = useRouter()
 
 const formationId = computed(() => route.params.id as string)
 const formation = ref<Formation | null>(null)
-const buyers = ref<UserProfile[]>([])
+const buyers = ref<FormationBuyer[]>([])
+const certifiedUsers = ref<Set<string>>(new Set())
+const certifyingUser = ref<string | null>(null)
 const loading = ref(true)
 const error = ref<string | null>(null)
 
@@ -37,6 +40,15 @@ onMounted(async () => {
         // Try to fetch buyers - don't fail if this errors (payments collection might not exist)
         try {
             buyers.value = await getFormationBuyers(formationId.value)
+            
+            // Check certifications for each buyer
+            for (const buyer of buyers.value) {
+                const role = buyer.role === 'expert' ? 'expert' : 'enterprise'
+                const certs = await getUserCertifications(buyer.uid, role)
+                if (certs.includes(formationId.value)) {
+                    certifiedUsers.value.add(buyer.uid)
+                }
+            }
         } catch (buyersError) {
             console.warn('Could not fetch buyers:', buyersError)
             // Keep buyers as empty array, don't block the page
@@ -66,6 +78,28 @@ function formatDate(date: Date): string {
 
 function goBack() {
     router.push('/admin/formations')
+}
+
+// Certify a user for this formation
+async function certifyUser(buyer: FormationBuyer) {
+    if (certifyingUser.value || certifiedUsers.value.has(buyer.uid)) return
+    
+    certifyingUser.value = buyer.uid
+    try {
+        const role = buyer.role === 'expert' ? 'expert' : 'enterprise'
+        await addCertification(buyer.uid, role, formationId.value)
+        certifiedUsers.value.add(buyer.uid)
+    } catch (e) {
+        console.error('Error certifying user:', e)
+        alert('Erreur lors de la certification')
+    } finally {
+        certifyingUser.value = null
+    }
+}
+
+// Check if user is certified
+function isCertified(userId: string): boolean {
+    return certifiedUsers.value.has(userId)
 }
 </script>
 
@@ -178,6 +212,8 @@ function goBack() {
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Email</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Téléphone</th>
                             <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Rôle</th>
+                            <th class="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase">Source</th>
+                            <th class="px-4 py-3 text-center text-xs font-medium text-slate-500 uppercase">Certification</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-100">
@@ -200,6 +236,45 @@ function goBack() {
                                 >
                                     {{ buyer.role === 'expert' ? 'Expert' : 'Entreprise' }}
                                 </span>
+                            </td>
+                            <td class="px-4 py-3">
+                                <span 
+                                    v-if="buyer.source === 'pack'"
+                                    class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded font-medium bg-amber-100 text-amber-700"
+                                    :title="buyer.packTitle"
+                                >
+                                    <Icon name="heroicons:cube" class="w-3 h-3" />
+                                    {{ buyer.packTitle || 'Pack' }}
+                                </span>
+                                <span 
+                                    v-else
+                                    class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded font-medium bg-slate-100 text-slate-600"
+                                >
+                                    <Icon name="heroicons:credit-card" class="w-3 h-3" />
+                                    Direct
+                                </span>
+                            </td>
+                            <td class="px-4 py-3 text-center">
+                                <!-- Already certified -->
+                                <span 
+                                    v-if="isCertified(buyer.uid)"
+                                    class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded font-medium bg-emerald-100 text-emerald-700"
+                                >
+                                    <Icon name="heroicons:check-badge" class="w-4 h-4" />
+                                    Certifié
+                                </span>
+                                <!-- Certify button -->
+                                <button
+                                    v-else
+                                    type="button"
+                                    class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    :disabled="certifyingUser === buyer.uid"
+                                    @click="certifyUser(buyer)"
+                                >
+                                    <div v-if="certifyingUser === buyer.uid" class="spinner-sm"></div>
+                                    <Icon v-else name="heroicons:academic-cap" class="w-4 h-4" />
+                                    Certifier
+                                </button>
                             </td>
                         </tr>
                     </tbody>
@@ -224,6 +299,44 @@ function goBack() {
                             >
                                 {{ buyer.role === 'expert' ? 'Expert' : 'Entreprise' }}
                             </span>
+                        </div>
+                        <!-- Source badge -->
+                        <div class="mt-2 flex items-center gap-2">
+                            <span 
+                                v-if="buyer.source === 'pack'"
+                                class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded font-medium bg-amber-100 text-amber-700"
+                            >
+                                <Icon name="heroicons:cube" class="w-3 h-3" />
+                                {{ buyer.packTitle || 'Pack' }}
+                            </span>
+                            <span 
+                                v-else
+                                class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded font-medium bg-slate-100 text-slate-600"
+                            >
+                                <Icon name="heroicons:credit-card" class="w-3 h-3" />
+                                Direct
+                            </span>
+                        </div>
+                        <!-- Certification button for mobile -->
+                        <div class="mt-3 flex justify-end">
+                            <span 
+                                v-if="isCertified(buyer.uid)"
+                                class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded font-medium bg-emerald-100 text-emerald-700"
+                            >
+                                <Icon name="heroicons:check-badge" class="w-4 h-4" />
+                                Certifié
+                            </span>
+                            <button
+                                v-else
+                                type="button"
+                                class="inline-flex items-center gap-1 text-xs px-3 py-1.5 rounded font-medium bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                                :disabled="certifyingUser === buyer.uid"
+                                @click="certifyUser(buyer)"
+                            >
+                                <div v-if="certifyingUser === buyer.uid" class="spinner-sm"></div>
+                                <Icon v-else name="heroicons:academic-cap" class="w-4 h-4" />
+                                Certifier
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -48,13 +48,14 @@ service cloud.firestore {
       // Authenticated users can read experts (for expert pool)
       allow read: if isAuthenticated();
       
-      // Experts can create/update their own profile
-      allow create, update: if isOwner(userId);
+      // Experts can create/update their own profile, admins can also update (for certifications)
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
       
       // Only admins can delete expert profiles
       allow delete: if isAdmin();
     }
-    
+
     // ========================================
     // Enterprises Collection
     // ========================================
@@ -62,8 +63,9 @@ service cloud.firestore {
       // Owner and admins can read enterprise data
       allow read: if isOwner(userId) || isAdmin();
       
-      // Enterprises can create/update their own profile
-      allow create, update: if isOwner(userId);
+      // Enterprises can create/update their own profile, admins can also update (for certifications)
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId) || isAdmin();
       
       // Only admins can delete enterprise profiles
       allow delete: if isAdmin();
@@ -101,8 +103,25 @@ service cloud.firestore {
       // Users can read their own payments
       allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
       
-      // Only admins can create, update, delete payments
-      allow create, update, delete: if isAdmin();
+      // Authenticated users can create their own payments
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      
+      // Only admins can update or delete payments
+      allow update, delete: if isAdmin();
+    }
+    
+    // ========================================
+    // Notifications Collection
+    // ========================================
+    match /notifications/{notificationId} {
+      // Only admins can read notifications
+      allow read: if isAdmin();
+      
+      // Authenticated users can create notifications (for payment notifications)
+      allow create: if isAuthenticated();
+      
+      // Only admins can update (mark as read) or delete notifications
+      allow update, delete: if isAdmin();
     }
   }
 }

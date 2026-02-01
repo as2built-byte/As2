@@ -1,12 +1,12 @@
 <script setup lang="ts">
 /**
- * Admin Layout - Professional SaaS Dashboard
+ * Expert Layout - Professional Dashboard for BIM Experts
  * 
  * Features:
  * - Fixed sidebar with organized navigation sections
  * - Top header with page title and user menu
  * - Proper logout functionality
- * - Scalable structure for future features
+ * - Personalized for expert role
  */
 
 const route = useRoute()
@@ -18,54 +18,24 @@ const sidebarCollapsed = ref(false)
 // User menu
 const showUserMenu = ref(false)
 
-// Navigation structure - organized by sections
+// Navigation structure - organized by sections with single items
 const navigation = {
     main: [
-        { 
-            path: '/admin', 
-            label: 'Tableau de bord', 
-            icon: 'heroicons:home',
-            exact: true 
-        }
+        { path: '/expert', label: 'Tableau de bord', icon: 'heroicons:home', exact: true, disabled: true }
     ],
-    users: [
-        { 
-            path: '/admin/users', 
-            label: 'Utilisateurs', 
-            icon: 'heroicons:users',
-            exact: false 
-        }
+    missions: [
+        { path: '/expert/missions', label: 'Mes missions', icon: 'heroicons:briefcase', disabled: true }
     ],
-    content: [
-        { path: '/admin/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: true },
-        { path: '/admin/formations', label: 'Formations', icon: 'heroicons:academic-cap', disabled: false },
-        { path: '/admin/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
+    projects: [
+        { path: '/expert/projects', label: 'Les projets', icon: 'heroicons:folder-open', disabled: true }
     ],
-    finance: [
-        { path: '/admin/transactions', label: 'Transactions', icon: 'heroicons:banknotes', disabled: false }
+    training: [
+        { path: '/expert/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false }
+    ],
+    profile: [
+        { path: '/expert/profile', label: 'Mon profil', icon: 'heroicons:user-circle', disabled: true }
     ]
 }
-
-// Get pending count from store
-const adminStore = useAdminStore()
-const pendingCount = computed(() => adminStore.stats.pendingUsers || 0)
-
-// Import stores
-import { useAdminStore } from '~/stores/admin'
-import { useNotificationsStore } from '~/stores/notifications'
-
-// Notifications store
-const notificationsStore = useNotificationsStore()
-
-// Subscribe to notifications on mount
-onMounted(() => {
-    notificationsStore.subscribe()
-})
-
-// Unsubscribe on unmount
-onUnmounted(() => {
-    notificationsStore.unsubscribe()
-})
 
 // Check if route is active
 function isActive(item: { path: string; exact?: boolean }): boolean {
@@ -79,13 +49,12 @@ function isActive(item: { path: string; exact?: boolean }): boolean {
 // Get page title
 const pageTitle = computed(() => {
     const path = route.path
-    if (path === '/admin') return 'Tableau de bord'
-    if (path.includes('/admin/users')) return 'Gestion des utilisateurs'
-    if (path.includes('/admin/missions')) return 'Missions'
-    if (path.includes('/admin/formations')) return 'Formations'
-    if (path.includes('/admin/audits')) return 'Audits'
-    if (path.includes('/admin/transactions')) return 'Transactions'
-    return 'Administration'
+    if (path === '/expert') return 'Tableau de bord'
+    if (path.includes('/expert/missions')) return 'Missions'
+    if (path.includes('/expert/projects')) return 'Projets'
+    if (path.includes('/expert/formations') || path.includes('/expert/packs')) return 'Formations/Packs'
+    if (path.includes('/expert/profile')) return 'Mon profil'
+    return 'Espace Expert'
 })
 
 // Handle logout
@@ -129,7 +98,7 @@ function closeUserMenu() {
                 <button 
                     v-else
                     type="button"
-                    class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg mx-auto"
+                    class="p-1.5 text-blue-300 hover:text-white hover:bg-blue-800 rounded-lg mx-auto"
                     @click="sidebarCollapsed = false"
                 >
                     <Icon name="heroicons:chevron-right" class="w-5 h-5" />
@@ -138,49 +107,38 @@ function closeUserMenu() {
 
             <!-- Navigation -->
             <nav class="flex-1 overflow-y-auto py-4 px-3 sidebar-scroll">
-                <!-- Main -->
+                <!-- Main Dashboard -->
                 <div class="space-y-1">
-                    <NuxtLink 
-                        v-for="item in navigation.main" 
-                        :key="item.path"
-                        :to="item.path"
-                        class="admin-nav-item"
-                        :class="{ 'admin-nav-item-active': isActive(item) }"
-                        :title="sidebarCollapsed ? item.label : undefined"
-                    >
-                        <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
-                        <span v-if="!sidebarCollapsed">{{ item.label }}</span>
-                    </NuxtLink>
-                </div>
-
-                <!-- Users Section -->
-                <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Utilisateurs
-                    </p>
-                    <div class="space-y-1">
+                    <template v-for="item in navigation.main" :key="item.path">
                         <NuxtLink 
-                            v-for="item in navigation.users" 
-                            :key="item.path"
+                            v-if="!item.disabled"
                             :to="item.path"
                             class="admin-nav-item"
                             :class="{ 'admin-nav-item-active': isActive(item) }"
                             :title="sidebarCollapsed ? item.label : undefined"
                         >
                             <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
-                            <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
+                            <span v-if="!sidebarCollapsed">{{ item.label }}</span>
                         </NuxtLink>
-                    </div>
+                        <div 
+                            v-else
+                            class="admin-nav-item nav-item-disabled"
+                            :title="sidebarCollapsed ? item.label : undefined"
+                        >
+                            <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                            <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
+                            <span v-if="!sidebarCollapsed" class="text-xs text-slate-500">Bientôt</span>
+                        </div>
+                    </template>
                 </div>
 
-                <!-- Content Section -->
-                <div class="mt-8">
+                <!-- Missions Section -->
+                <div class="mt-6">
                     <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Contenu
+                        Missions
                     </p>
                     <div class="space-y-1">
-                        <template v-for="item in navigation.content" :key="item.path">
-                            <!-- Active link -->
+                        <template v-for="item in navigation.missions" :key="item.path">
                             <NuxtLink 
                                 v-if="!item.disabled"
                                 :to="item.path"
@@ -191,7 +149,6 @@ function closeUserMenu() {
                                 <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
                                 <span v-if="!sidebarCollapsed">{{ item.label }}</span>
                             </NuxtLink>
-                            <!-- Disabled item -->
                             <div 
                                 v-else
                                 class="admin-nav-item nav-item-disabled"
@@ -199,20 +156,19 @@ function closeUserMenu() {
                             >
                                 <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
                                 <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
-                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
+                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-500">Bientôt</span>
                             </div>
                         </template>
                     </div>
                 </div>
 
-                <!-- Finance Section -->
-                <div class="mt-8">
+                <!-- Projects Section -->
+                <div class="mt-6">
                     <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Finance
+                        Projets
                     </p>
                     <div class="space-y-1">
-                        <template v-for="item in navigation.finance" :key="item.path">
-                            <!-- Active link -->
+                        <template v-for="item in navigation.projects" :key="item.path">
                             <NuxtLink 
                                 v-if="!item.disabled"
                                 :to="item.path"
@@ -223,7 +179,6 @@ function closeUserMenu() {
                                 <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
                                 <span v-if="!sidebarCollapsed">{{ item.label }}</span>
                             </NuxtLink>
-                            <!-- Disabled item -->
                             <div 
                                 v-else
                                 class="admin-nav-item nav-item-disabled"
@@ -231,7 +186,67 @@ function closeUserMenu() {
                             >
                                 <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
                                 <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
-                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
+                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-500">Bientôt</span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Training Section -->
+                <div class="mt-6">
+                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Formation
+                    </p>
+                    <div class="space-y-1">
+                        <template v-for="item in navigation.training" :key="item.path">
+                            <NuxtLink 
+                                v-if="!item.disabled"
+                                :to="item.path"
+                                class="admin-nav-item"
+                                :class="{ 'admin-nav-item-active': isActive(item) }"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed">{{ item.label }}</span>
+                            </NuxtLink>
+                            <div 
+                                v-else
+                                class="admin-nav-item nav-item-disabled"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
+                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-500">Bientôt</span>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Profile Section -->
+                <div class="mt-6">
+                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                        Compte
+                    </p>
+                    <div class="space-y-1">
+                        <template v-for="item in navigation.profile" :key="item.path">
+                            <NuxtLink 
+                                v-if="!item.disabled"
+                                :to="item.path"
+                                class="admin-nav-item"
+                                :class="{ 'admin-nav-item-active': isActive(item) }"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed">{{ item.label }}</span>
+                            </NuxtLink>
+                            <div 
+                                v-else
+                                class="admin-nav-item nav-item-disabled"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
+                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-500">Bientôt</span>
                             </div>
                         </template>
                     </div>
@@ -253,8 +268,10 @@ function closeUserMenu() {
 
                 <!-- Right Actions -->
                 <div class="flex items-center gap-4">
-                    <!-- Notifications -->
-                    <NotificationBell />
+                    <!-- Notifications (placeholder) -->
+                    <button type="button" class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                        <Icon name="heroicons:bell" class="w-5 h-5" />
+                    </button>
 
                     <!-- User Menu -->
                     <div class="relative">
@@ -287,6 +304,9 @@ function closeUserMenu() {
                                         {{ profile?.firstName }} {{ profile?.lastName }}
                                     </p>
                                     <p class="text-xs text-slate-500">{{ profile?.email }}</p>
+                                    <span class="inline-block mt-1 text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full font-medium">
+                                        Expert BIM
+                                    </span>
                                 </div>
                                 <button 
                                     type="button"

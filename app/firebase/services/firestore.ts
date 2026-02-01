@@ -532,38 +532,79 @@ export async function deletePack(id: string): Promise<void> {
 // Formation Buyers (Payments)
 // ========================================
 
-/**
- * Get all users who purchased a specific formation
- * @param formationId Formation ID
- * @returns Array of user profiles who purchased the formation
- */
-export async function getFormationBuyers(formationId: string): Promise<UserProfile[]> {
-    const db = getFirebaseFirestore()
+export interface FormationBuyer extends UserProfile {
+    source: 'direct' | 'pack'
+    packTitle?: string
+}
 
-    // Query payments for this formation
+/**
+ * Get all users who have access to a specific formation
+ * Includes both direct purchases and pack purchases
+ * @param formationId Formation ID
+ * @returns Array of user profiles with source info
+ */
+export async function getFormationBuyers(formationId: string): Promise<FormationBuyer[]> {
+    const db = getFirebaseFirestore()
     const paymentsRef = collection(db, 'payments')
-    const q = query(
+
+    // Map to track users and their source (userId -> FormationBuyer)
+    const buyersMap = new Map<string, FormationBuyer>()
+
+    // 1. Get direct formation payments
+    const directPaymentsQuery = query(
         paymentsRef,
         where('itemType', '==', 'formation'),
         where('itemId', '==', formationId)
     )
-    const paymentsSnapshot = await getDocs(q)
+    const directPaymentsSnapshot = await getDocs(directPaymentsQuery)
 
-    if (paymentsSnapshot.empty) {
-        return []
-    }
-
-    // Get unique user IDs
-    const userIds = [...new Set(paymentsSnapshot.docs.map(doc => doc.data().userId as string))]
-
-    // Fetch user profiles
-    const users: UserProfile[] = []
-    for (const userId of userIds) {
-        const userProfile = await getUserProfile(userId)
-        if (userProfile) {
-            users.push(userProfile)
+    for (const paymentDoc of directPaymentsSnapshot.docs) {
+        const userId = paymentDoc.data().userId as string
+        if (!buyersMap.has(userId)) {
+            const userProfile = await getUserProfile(userId)
+            if (userProfile) {
+                buyersMap.set(userId, { ...userProfile, source: 'direct' })
+            }
         }
     }
 
-    return users
+    // 2. Get packs that include this formation
+    const packsRef = collection(db, COLLECTIONS.PACKS)
+    const packsSnapshot = await getDocs(packsRef)
+    const packsWithFormation: { id: string; title: string }[] = []
+
+    for (const packDoc of packsSnapshot.docs) {
+        const packData = packDoc.data()
+        const formationIds = packData.formationIds as string[] || []
+        if (formationIds.includes(formationId)) {
+            packsWithFormation.push({ id: packDoc.id, title: packData.title as string })
+        }
+    }
+
+    // 3. For each pack, get pack payments
+    for (const pack of packsWithFormation) {
+        const packPaymentsQuery = query(
+            paymentsRef,
+            where('itemType', '==', 'pack'),
+            where('itemId', '==', pack.id)
+        )
+        const packPaymentsSnapshot = await getDocs(packPaymentsQuery)
+
+        for (const paymentDoc of packPaymentsSnapshot.docs) {
+            const userId = paymentDoc.data().userId as string
+            // Only add if not already from direct purchase
+            if (!buyersMap.has(userId)) {
+                const userProfile = await getUserProfile(userId)
+                if (userProfile) {
+                    buyersMap.set(userId, {
+                        ...userProfile,
+                        source: 'pack',
+                        packTitle: pack.title
+                    })
+                }
+            }
+        }
+    }
+
+    return Array.from(buyersMap.values())
 }

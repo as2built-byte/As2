@@ -448,7 +448,7 @@ const packDiscount = computed(() => {
                         <td class="px-4 py-3">
                             <span class="text-sm text-slate-600">{{ formation.durationHours }}h</span>
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3 whitespace-nowrap">
                             <span class="text-sm font-medium text-slate-800">{{ formatPrice(formation.price) }}</span>
                         </td>
                         <td class="px-4 py-3">
@@ -598,7 +598,7 @@ const packDiscount = computed(() => {
                                 </span>
                             </div>
                         </td>
-                        <td class="px-4 py-3">
+                        <td class="px-4 py-3 whitespace-nowrap">
                             <span class="text-sm font-medium text-slate-800">{{ formatPrice(pack.price) }}</span>
                         </td>
                         <td class="px-4 py-3">

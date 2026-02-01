@@ -17,6 +17,7 @@ experts
 enterprises
   └── {uid}
       - companyName
+      - certifications: []
       - createdAt
 
 formations

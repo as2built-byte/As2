@@ -417,6 +417,64 @@
   .form-header-subtitle {
     @apply text-slate-500 text-sm;
   }
+
+  /* ========================================
+       Dashboard Navigation Styles
+       ======================================== */
+
+  /* Admin sidebar navigation */
+  .admin-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-400 transition-all duration-200 cursor-pointer;
+  }
+
+  .admin-nav-item:hover:not(.nav-item-disabled) {
+    @apply text-white bg-slate-800;
+  }
+
+  .admin-nav-item-active {
+    @apply text-white bg-blue-600 !important;
+  }
+
+  /* Expert sidebar navigation */
+  .expert-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-blue-200 transition-all duration-200 cursor-pointer;
+  }
+
+  .expert-nav-item:hover:not(.nav-item-disabled) {
+    @apply text-white bg-blue-800;
+  }
+
+  .expert-nav-item-active {
+    @apply text-white bg-blue-600 !important;
+  }
+
+  /* Shared disabled state */
+  .nav-item-disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  /* Enterprise sidebar navigation */
+  .enterprise-nav-item {
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-emerald-200 transition-all duration-200 cursor-pointer;
+  }
+
+  .enterprise-nav-item:hover:not(.nav-item-disabled) {
+    @apply text-white bg-emerald-800;
+  }
+
+  .enterprise-nav-item-active {
+    @apply text-white bg-emerald-600 !important;
+  }
+
+  /* Hidden scrollbar for sidebars */
+  .sidebar-scroll {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .sidebar-scroll::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer utilities {
