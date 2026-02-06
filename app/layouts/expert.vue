@@ -33,7 +33,7 @@ const navigation = {
         { path: '/expert/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false }
     ],
     profile: [
-        { path: '/expert/profile', label: 'Mon profil', icon: 'heroicons:user-circle', disabled: true }
+        { path: '/expert/profile', label: 'Mon profil', icon: 'heroicons:user-circle', disabled: false }
     ]
 }
 

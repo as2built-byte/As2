@@ -15,6 +15,7 @@ service firebase.storage {
       allow write: if isOwner(userId)
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('application/(x-)?pdf');
+      allow delete: if isOwner(userId);
       allow read: if isAuthenticated();
     }
     

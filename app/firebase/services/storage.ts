@@ -82,6 +82,60 @@ export async function uploadExpertCV(
     return downloadUrl
 }
 
+/**
+ * Delete an expert's CV by URL
+ * Extracts the path from the download URL and deletes the file
+ * @param cvUrl The download URL of the CV
+ */
+export async function deleteExpertCVByUrl(cvUrl: string): Promise<void> {
+    if (!cvUrl) {
+        console.warn('deleteExpertCVByUrl: No CV URL provided')
+        return
+    }
+
+    const storage = getFirebaseStorage()
+
+    try {
+        // Extract the path from the download URL
+        // Firebase Storage URLs contain the path after /o/ and before ?
+        // Example: https://firebasestorage.googleapis.com/v0/b/bucket/o/experts%2Fcv%2Fuid%2Ffile.pdf?token=...
+        const urlParts = cvUrl.split('/o/')
+        if (urlParts.length < 2) {
+            console.error('deleteExpertCVByUrl: Invalid Firebase Storage URL format:', cvUrl)
+            return
+        }
+
+        const pathWithToken = urlParts[1]
+        if (!pathWithToken) {
+            console.error('deleteExpertCVByUrl: Could not extract path segment from URL:', cvUrl)
+            return
+        }
+
+        const pathParts = pathWithToken.split('?')
+        const urlPath = pathParts[0] ? decodeURIComponent(pathParts[0]) : ''
+
+        if (!urlPath) {
+            console.error('deleteExpertCVByUrl: Could not extract path from URL:', cvUrl)
+            return
+        }
+
+        console.log('deleteExpertCVByUrl: Attempting to delete file at path:', urlPath)
+        const fileRef = ref(storage, urlPath)
+        await deleteObject(fileRef)
+        console.log('deleteExpertCVByUrl: Successfully deleted old CV')
+    } catch (error: any) {
+        // Log detailed error for debugging
+        console.error('deleteExpertCVByUrl: Error deleting CV:', {
+            url: cvUrl,
+            error: error.message || error,
+            code: error.code
+        })
+        // Don't throw - allow the upload to continue even if deletion fails
+        // The old file will remain but the new URL will be stored in Firestore
+    }
+}
+
+
 // ========================================
 // General Storage Utilities
 // ========================================

@@ -46,3 +46,21 @@ payments
       - itemType: "formation" | "pack" | "audit"
       - itemId
       - createdAt
+
+notifications
+  └── {notificationId}
+      - type: "new_payment" | "new_registration" | "certification_request"
+      - title: string
+      - message: string
+      - data: {
+          userId: string
+          userName: string
+          userRole: "expert" | "enterprise"
+          itemType: "formation" | "pack"
+          itemId: string
+          itemTitle: string
+          amount: number
+        }
+      - targetRole: "admin"
+      - read: boolean // false par défaut
+      - createdAt // Timestamp Firebase

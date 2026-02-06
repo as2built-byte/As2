@@ -209,6 +209,20 @@ export async function getExpertProfile(uid: string): Promise<ExpertProfile | nul
     } as ExpertProfile
 }
 
+/**
+ * Update an expert profile
+ * @param uid User ID
+ * @param data Partial expert data to update (availability, cvUrl)
+ */
+export async function updateExpertProfile(
+    uid: string,
+    data: Partial<Omit<ExpertProfile, 'uid' | 'certifications' | 'createdAt'>>
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const expertRef = doc(db, COLLECTIONS.EXPERTS, uid)
+    await updateDoc(expertRef, data as DocumentData)
+}
+
 // ========================================
 // Enterprise Profile Functions
 // ========================================
