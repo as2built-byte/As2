@@ -18,7 +18,37 @@ enterprises
   └── {uid}
       - companyName
       - certifications: []
+      - projectCount: number // 0 par defaut, incremente a chaque projet cree
+      - hasSubscription: boolean // false par defaut, true apres approbation admin
+      - subscriptionRequestPending: boolean // false par defaut, true apres demande d'abonnement, remis a false apres approbation
       - createdAt
+
+projects
+  └── {projectId}
+      - enterpriseId: string // uid de l'entreprise proprietaire
+      - title: string
+      - description: string
+      - address: string
+      - startDate: Timestamp
+      - status: "active" | "completed" | "archived"
+      - createdAt: Timestamp
+      - updatedAt: Timestamp
+
+missions
+  └── {missionId}
+      - projectId: string // reference au projet
+      - enterpriseId: string // uid de l'entreprise
+      - expertId: string | null // null jusqu'a affectation par admin
+      - title: string
+      - description: string
+      - status: "pending_admin" | "proposed" | "accepted" | "refused" | "completed"
+          // pending_admin: en attente d'affectation par admin
+          // proposed: propose a un expert, en attente de reponse
+          // accepted: expert a accepte, mission en cours
+          // refused: expert a refuse, retourne a pending_admin
+          // completed: mission terminee
+      - createdAt: Timestamp
+      - updatedAt: Timestamp
 
 formations
   └── {formationId}
@@ -49,18 +79,19 @@ payments
 
 notifications
   └── {notificationId}
-      - type: "new_payment" | "new_registration" | "certification_request"
+      - type: "new_payment" | "new_registration" | "certification_request" | "subscription_request" | "new_mission"
       - title: string
       - message: string
       - data: {
           userId: string
           userName: string
           userRole: "expert" | "enterprise"
-          itemType: "formation" | "pack"
+          itemType: "formation" | "pack" | "project" | "mission"  // selon le type
           itemId: string
           itemTitle: string
-          amount: number
+          amount: number // optionnel, pour les paiements
         }
       - targetRole: "admin"
       - read: boolean // false par défaut
       - createdAt // Timestamp Firebase
+

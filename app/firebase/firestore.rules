@@ -123,6 +123,56 @@ service cloud.firestore {
       // Only admins can update (mark as read) or delete notifications
       allow update, delete: if isAdmin();
     }
+    
+    // ========================================
+    // Projects Collection
+    // ========================================
+    match /projects/{projectId} {
+      // Enterprise owner and admins can read their projects
+      allow read: if isAuthenticated() && (
+        resource.data.enterpriseId == request.auth.uid || isAdmin()
+      );
+      
+      // Authenticated enterprises can create their own projects
+      allow create: if isAuthenticated() && 
+        request.resource.data.enterpriseId == request.auth.uid;
+      
+      // Enterprise owner or admin can update projects
+      allow update: if isAuthenticated() && (
+        resource.data.enterpriseId == request.auth.uid || isAdmin()
+      );
+      
+      // Only admins can delete projects
+      allow delete: if isAdmin();
+    }
+    
+    // ========================================
+    // Missions Collection
+    // ========================================
+    match /missions/{missionId} {
+      // Enterprise owner, assigned expert, or admin can read missions
+      allow read: if isAuthenticated() && (
+        resource.data.enterpriseId == request.auth.uid ||
+        resource.data.expertId == request.auth.uid ||
+        isAdmin()
+      );
+      
+      // Enterprises can create missions for their projects
+      allow create: if isAuthenticated() && 
+        request.resource.data.enterpriseId == request.auth.uid;
+      
+      // Admin can update any mission (for assigning expert)
+      // Expert can update missions assigned to them (for accept/refuse)
+      // Enterprise owner can update their missions
+      allow update: if isAuthenticated() && (
+        resource.data.enterpriseId == request.auth.uid ||
+        resource.data.expertId == request.auth.uid ||
+        isAdmin()
+      );
+      
+      // Only admins can delete missions
+      allow delete: if isAdmin();
+    }
   }
 }
 

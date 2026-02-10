@@ -8,6 +8,8 @@ export type NotificationType =
     | 'new_payment'
     | 'new_registration'
     | 'certification_request'
+    | 'subscription_request'  // Enterprise requests subscription for more projects
+    | 'new_mission'           // Enterprise creates a new mission (pending admin)
 
 export interface Notification {
     id: string

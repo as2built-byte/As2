@@ -9,6 +9,18 @@ export default defineNuxtConfig({
     '@nuxtjs/tailwindcss',
   ],
 
+  // Configure Icon module for better performance
+  icon: {
+    provider: 'server',
+    serverBundle: {
+      collections: ['heroicons'], // Only bundle heroicons that we use
+    },
+    clientBundle: {
+      scan: true, // Auto-detect icons used in your components
+      sizeLimitKb: 512, // Limit bundle size
+    }
+  },
+
   // Configure Tailwind CSS
   tailwindcss: {
     cssPath: '~/assets/css/tailwind.css',

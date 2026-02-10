@@ -6,3 +6,6 @@
 
 export * from './user'
 export * from './formation'
+export * from './notification'
+export * from './project'
+export * from './mission'

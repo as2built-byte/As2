@@ -66,6 +66,9 @@ export interface CreateExpertData {
 export interface EnterpriseProfile {
     uid: string
     companyName: string
+    projectCount: number        // Number of projects created (for free limit)
+    hasSubscription: boolean    // Whether enterprise has active subscription
+    subscriptionRequestPending: boolean // Whether subscription request is pending
     createdAt: Date
 }
 

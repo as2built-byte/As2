@@ -24,7 +24,7 @@ const navigation = {
         { path: '/expert', label: 'Tableau de bord', icon: 'heroicons:home', exact: true, disabled: true }
     ],
     missions: [
-        { path: '/expert/missions', label: 'Mes missions', icon: 'heroicons:briefcase', disabled: true }
+        { path: '/expert/missions', label: 'Mes missions', icon: 'heroicons:briefcase', disabled: false }
     ],
     projects: [
         { path: '/expert/projects', label: 'Les projets', icon: 'heroicons:folder-open', disabled: true }

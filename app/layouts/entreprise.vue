@@ -30,10 +30,10 @@ const navigation = {
         }
     ],
     missions: [
-        { path: '/entreprise/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: true }
+        { path: '/entreprise/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: false }
     ],
     projects: [
-        { path: '/entreprise/projets', label: 'Nos projets', icon: 'heroicons:folder-open', disabled: true }
+        { path: '/entreprise/projets', label: 'Nos projets', icon: 'heroicons:folder-open', disabled: false }
     ],
     audits: [
         { path: '/entreprise/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
@@ -146,16 +146,27 @@ function closeUserMenu() {
                         Recrutement
                     </p>
                     <div class="space-y-1">
-                        <div 
-                            v-for="item in navigation.missions" 
-                            :key="item.path"
-                            class="admin-nav-item nav-item-disabled"
-                            :title="sidebarCollapsed ? item.label : undefined"
-                        >
-                            <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
-                            <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
-                            <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
-                        </div>
+                        <template v-for="item in navigation.missions" :key="item.path">
+                            <NuxtLink 
+                                v-if="!item.disabled"
+                                :to="item.path"
+                                class="admin-nav-item"
+                                :class="{ 'admin-nav-item-active': isActive(item) }"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed">{{ item.label }}</span>
+                            </NuxtLink>
+                            <div 
+                                v-else
+                                class="admin-nav-item nav-item-disabled"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
+                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
+                            </div>
+                        </template>
                     </div>
                 </div>
 
@@ -165,16 +176,27 @@ function closeUserMenu() {
                         Projets
                     </p>
                     <div class="space-y-1">
-                        <div 
-                            v-for="item in navigation.projects" 
-                            :key="item.path"
-                            class="admin-nav-item nav-item-disabled"
-                            :title="sidebarCollapsed ? item.label : undefined"
-                        >
-                            <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
-                            <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
-                            <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
-                        </div>
+                        <template v-for="item in navigation.projects" :key="item.path">
+                            <NuxtLink 
+                                v-if="!item.disabled"
+                                :to="item.path"
+                                class="admin-nav-item"
+                                :class="{ 'admin-nav-item-active': isActive(item) }"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed">{{ item.label }}</span>
+                            </NuxtLink>
+                            <div 
+                                v-else
+                                class="admin-nav-item nav-item-disabled"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
+                                <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
+                            </div>
+                        </template>
                     </div>
                 </div>
 

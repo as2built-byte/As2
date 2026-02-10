@@ -37,11 +37,12 @@ const navigation = {
         }
     ],
     content: [
-        { path: '/admin/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: true },
+        { path: '/admin/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: false },
         { path: '/admin/formations', label: 'Formations', icon: 'heroicons:academic-cap', disabled: false },
         { path: '/admin/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
     ],
     finance: [
+        { path: '/admin/subscriptions', label: 'Abonnements', icon: 'heroicons:sparkles', disabled: false },
         { path: '/admin/transactions', label: 'Transactions', icon: 'heroicons:banknotes', disabled: false }
     ]
 }
@@ -82,6 +83,7 @@ const pageTitle = computed(() => {
     if (path === '/admin') return 'Tableau de bord'
     if (path.includes('/admin/users')) return 'Gestion des utilisateurs'
     if (path.includes('/admin/missions')) return 'Missions'
+    if (path.includes('/admin/subscriptions')) return 'Abonnements'
     if (path.includes('/admin/formations')) return 'Formations'
     if (path.includes('/admin/audits')) return 'Audits'
     if (path.includes('/admin/transactions')) return 'Transactions'

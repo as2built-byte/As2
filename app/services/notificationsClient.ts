@@ -100,6 +100,7 @@ export function subscribeToNotifications(
     return onSnapshot(
         q,
         (snapshot) => {
+            console.log('Notifications snapshot received:', snapshot.docs.length, 'docs')
             // Map documents and sort by createdAt in memory
             const notifications = snapshot.docs
                 .map(doc => ({
@@ -113,6 +114,7 @@ export function subscribeToNotifications(
 
             // Take only first 20
             const limited = notifications.slice(0, 20)
+            console.log('Processed notifications:', limited.length)
 
             callback(limited)
         },

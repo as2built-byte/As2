@@ -2,7 +2,7 @@
  * Firebase Firestore Service
  * 
  * Provides Firestore database functionality for As2Built.
- * Collections: users, experts, enterprises, formations, packs
+ * Collections: users, experts, enterprises, formations, packs, projects, missions
  */
 
 import {
@@ -16,6 +16,7 @@ import {
     collection,
     query,
     where,
+    orderBy,
     getDocs,
     addDoc,
     type Firestore,
@@ -36,7 +37,14 @@ import type {
     UpdateFormationData,
     Pack,
     CreatePackData,
-    UpdatePackData
+    UpdatePackData,
+    Project,
+    CreateProjectData,
+    UpdateProjectData,
+    Mission,
+    CreateMissionData,
+    UpdateMissionData,
+    MissionStatus
 } from '~/types'
 
 let firestoreInstance: Firestore | null = null
@@ -64,6 +72,8 @@ export const COLLECTIONS = {
     ENTERPRISES: 'enterprises',
     FORMATIONS: 'formations',
     PACKS: 'packs',
+    PROJECTS: 'projects',
+    MISSIONS: 'missions',
 } as const
 
 // ========================================
@@ -242,6 +252,9 @@ export async function createEnterpriseProfile(
     await setDoc(enterpriseRef, {
         uid,
         companyName: data.companyName,
+        projectCount: 0,
+        hasSubscription: false,
+        subscriptionRequestPending: false,
         createdAt: serverTimestamp(),
     })
 }
@@ -264,6 +277,9 @@ export async function getEnterpriseProfile(uid: string): Promise<EnterpriseProfi
     return {
         uid: enterpriseSnap.id,
         companyName: data.companyName,
+        projectCount: data.projectCount ?? 0,
+        hasSubscription: data.hasSubscription ?? false,
+        subscriptionRequestPending: data.subscriptionRequestPending ?? false,
         createdAt: data.createdAt?.toDate() || new Date(),
     } as EnterpriseProfile
 }
@@ -621,4 +637,491 @@ export async function getFormationBuyers(formationId: string): Promise<Formation
     }
 
     return Array.from(buyersMap.values())
+}
+
+// ========================================
+// Project Functions
+// ========================================
+
+/**
+ * Check if enterprise can create a new project
+ * Enterprise gets 1 free project, then needs subscription
+ */
+export async function canCreateProject(enterpriseId: string): Promise<boolean> {
+    const enterprise = await getEnterpriseProfile(enterpriseId)
+    if (!enterprise) return false
+
+    // Can create if: no projects yet OR has subscription
+    return enterprise.projectCount === 0 || enterprise.hasSubscription
+}
+
+/**
+ * Create a new project for an enterprise
+ * @param enterpriseId Enterprise UID
+ * @param data Project data
+ * @returns Project ID
+ */
+export async function createProject(
+    enterpriseId: string,
+    data: CreateProjectData
+): Promise<string> {
+    const db = getFirebaseFirestore()
+
+    // Check if enterprise can create project
+    const canCreate = await canCreateProject(enterpriseId)
+    if (!canCreate) {
+        throw new Error('Vous avez atteint la limite de projets gratuits. Demandez un abonnement pour créer plus de projets.')
+    }
+
+    const projectsRef = collection(db, COLLECTIONS.PROJECTS)
+
+    const docRef = await addDoc(projectsRef, {
+        enterpriseId,
+        title: data.title,
+        description: data.description,
+        address: data.address,
+        startDate: data.startDate,
+        status: 'draft',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
+
+    // Increment project count for enterprise
+    const enterpriseRef = doc(db, COLLECTIONS.ENTERPRISES, enterpriseId)
+    const enterprise = await getEnterpriseProfile(enterpriseId)
+    if (enterprise) {
+        await updateDoc(enterpriseRef, {
+            projectCount: enterprise.projectCount + 1
+        })
+    }
+
+    return docRef.id
+}
+
+/**
+ * Get all projects for an enterprise
+ */
+export async function getProjectsByEnterprise(enterpriseId: string): Promise<Project[]> {
+    const db = getFirebaseFirestore()
+    const projectsRef = collection(db, COLLECTIONS.PROJECTS)
+    const q = query(
+        projectsRef,
+        where('enterpriseId', '==', enterpriseId)
+    )
+
+    console.log('Querying projects for enterprise:', enterpriseId)
+
+    try {
+        const querySnapshot = await getDocs(q)
+        console.log('Found', querySnapshot.docs.length, 'projects')
+
+        return querySnapshot.docs.map(docSnap => {
+            const data = docSnap.data()
+            return {
+                id: docSnap.id,
+                enterpriseId: data.enterpriseId,
+                title: data.title,
+                description: data.description,
+                address: data.address,
+                startDate: data.startDate?.toDate() || new Date(),
+                status: data.status,
+                createdAt: data.createdAt?.toDate() || new Date(),
+                updatedAt: data.updatedAt?.toDate() || new Date(),
+            } as Project
+        })
+    } catch (error) {
+        console.error('Error fetching projects:', error)
+        throw error
+    }
+}
+
+/**
+ * Get a single project by ID
+ */
+export async function getProject(projectId: string): Promise<Project | null> {
+    const db = getFirebaseFirestore()
+    const projectRef = doc(db, COLLECTIONS.PROJECTS, projectId)
+    const projectSnap = await getDoc(projectRef)
+
+    if (!projectSnap.exists()) {
+        return null
+    }
+
+    const data = projectSnap.data()
+    return {
+        id: projectSnap.id,
+        enterpriseId: data.enterpriseId,
+        title: data.title,
+        description: data.description,
+        address: data.address,
+        startDate: data.startDate?.toDate() || new Date(),
+        status: data.status,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+    } as Project
+}
+
+/**
+ * Update a project
+ */
+export async function updateProject(projectId: string, data: UpdateProjectData): Promise<void> {
+    const db = getFirebaseFirestore()
+    const projectRef = doc(db, COLLECTIONS.PROJECTS, projectId)
+
+    await updateDoc(projectRef, {
+        ...data,
+        updatedAt: serverTimestamp(),
+    } as DocumentData)
+}
+
+/**
+ * Request subscription for an enterprise
+ * Creates a notification for admin
+ */
+export async function requestSubscription(
+    enterpriseId: string,
+    enterpriseName: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const notificationsRef = collection(db, 'notifications')
+
+    // Create notification for admin
+    await addDoc(notificationsRef, {
+        type: 'subscription_request',
+        title: 'Demande d\'abonnement',
+        message: `${enterpriseName} demande un abonnement pour créer plus de projets.`,
+        data: {
+            userId: enterpriseId,
+            userName: enterpriseName,
+            userRole: 'enterprise'
+        },
+        targetRole: 'admin',
+        read: false,
+        createdAt: serverTimestamp(),
+    })
+
+    // Mark subscription request as pending
+    const enterpriseRef = doc(db, COLLECTIONS.ENTERPRISES, enterpriseId)
+    await updateDoc(enterpriseRef, {
+        subscriptionRequestPending: true
+    })
+}
+
+/**
+ * Approve subscription for an enterprise (admin only)
+ */
+export async function approveSubscription(enterpriseId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const enterpriseRef = doc(db, COLLECTIONS.ENTERPRISES, enterpriseId)
+
+    await updateDoc(enterpriseRef, {
+        hasSubscription: true,
+        subscriptionRequestPending: false
+    })
+}
+
+/**
+ * Get enterprises that have requested subscription (projectCount >= 1 && hasSubscription === false)
+ * These are enterprises that have used their free project and need subscription to create more
+ */
+export async function getEnterprisesNeedingSubscription(): Promise<Array<EnterpriseProfile & { user?: UserProfile }>> {
+    const db = getFirebaseFirestore()
+    const enterprisesRef = collection(db, COLLECTIONS.ENTERPRISES)
+
+    // Get all enterprises without subscription
+    const q = query(enterprisesRef, where('hasSubscription', '==', false))
+    const snapshot = await getDocs(q)
+
+    const results: Array<EnterpriseProfile & { user?: UserProfile }> = []
+
+    for (const docSnap of snapshot.docs) {
+        const data = docSnap.data()
+        const projectCount = data.projectCount ?? 0
+
+        // Only include those who have used their free project (projectCount >= 1)
+        if (projectCount >= 1) {
+            // Get user info
+            const userProfile = await getUserProfile(docSnap.id)
+
+            results.push({
+                uid: docSnap.id,
+                companyName: data.companyName,
+                projectCount: projectCount,
+                hasSubscription: false,
+                subscriptionRequestPending: data.subscriptionRequestPending ?? false,
+                createdAt: data.createdAt?.toDate() || new Date(),
+                user: userProfile || undefined
+            })
+        }
+    }
+
+    return results
+}
+
+// ========================================
+// Mission Functions
+// ========================================
+
+/**
+ * Create a new mission for a project
+ */
+export async function createMission(
+    projectId: string,
+    enterpriseId: string,
+    data: CreateMissionData
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const missionsRef = collection(db, COLLECTIONS.MISSIONS)
+
+    const docRef = await addDoc(missionsRef, {
+        projectId,
+        enterpriseId,
+        title: data.title,
+        description: data.description,
+        status: 'pending_admin',
+        expertId: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Get all missions for a project
+ */
+export async function getMissionsByProject(projectId: string): Promise<Mission[]> {
+    const db = getFirebaseFirestore()
+    const missionsRef = collection(db, COLLECTIONS.MISSIONS)
+    const q = query(missionsRef, where('projectId', '==', projectId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            enterpriseId: data.enterpriseId,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            expertId: data.expertId || null,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Mission
+    })
+}
+
+/**
+ * Get all missions for an enterprise
+ */
+export async function getMissionsByEnterprise(enterpriseId: string): Promise<Mission[]> {
+    const db = getFirebaseFirestore()
+    const missionsRef = collection(db, COLLECTIONS.MISSIONS)
+    const q = query(missionsRef, where('enterpriseId', '==', enterpriseId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            enterpriseId: data.enterpriseId,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            expertId: data.expertId || null,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Mission
+    })
+}
+
+/**
+ * Get all missions assigned to an expert
+ */
+export async function getMissionsByExpert(expertId: string): Promise<Mission[]> {
+    const db = getFirebaseFirestore()
+    const missionsRef = collection(db, COLLECTIONS.MISSIONS)
+    const q = query(missionsRef, where('expertId', '==', expertId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            enterpriseId: data.enterpriseId,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            expertId: data.expertId || null,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Mission
+    })
+}
+
+/**
+ * Get all missions pending admin review
+ */
+export async function getPendingMissionsForAdmin(): Promise<Mission[]> {
+    const db = getFirebaseFirestore()
+    const missionsRef = collection(db, COLLECTIONS.MISSIONS)
+    const q = query(missionsRef, where('status', '==', 'pending_admin'))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            enterpriseId: data.enterpriseId,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            expertId: data.expertId || null,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Mission
+    })
+}
+
+/**
+ * Get a single mission by ID
+ */
+export async function getMission(missionId: string): Promise<Mission | null> {
+    const db = getFirebaseFirestore()
+    const missionRef = doc(db, COLLECTIONS.MISSIONS, missionId)
+    const missionSnap = await getDoc(missionRef)
+
+    if (!missionSnap.exists()) {
+        return null
+    }
+
+    const data = missionSnap.data()
+    return {
+        id: missionSnap.id,
+        projectId: data.projectId,
+        enterpriseId: data.enterpriseId,
+        title: data.title,
+        description: data.description,
+        status: data.status,
+        expertId: data.expertId || null,
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+    } as Mission
+}
+
+/**
+ * Assign an expert to a mission (admin action)
+ * Changes status from pending_admin to proposed
+ */
+export async function assignExpertToMission(
+    missionId: string,
+    expertId: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const missionRef = doc(db, COLLECTIONS.MISSIONS, missionId)
+
+    await updateDoc(missionRef, {
+        expertId,
+        status: 'proposed',
+        updatedAt: serverTimestamp(),
+    })
+}
+
+/**
+ * Update mission status
+ */
+export async function updateMissionStatus(
+    missionId: string,
+    status: MissionStatus
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const missionRef = doc(db, COLLECTIONS.MISSIONS, missionId)
+
+    const updateData: Record<string, unknown> = {
+        status,
+        updatedAt: serverTimestamp(),
+    }
+
+    // If refused, clear the expert assignment so admin can reassign
+    if (status === 'refused') {
+        updateData.expertId = null
+        updateData.status = 'pending_admin' // Return to admin queue
+    }
+
+    await updateDoc(missionRef, updateData)
+}
+
+/**
+ * Accept mission (expert action)
+ */
+export async function acceptMission(missionId: string): Promise<void> {
+    await updateMissionStatus(missionId, 'accepted')
+}
+
+/**
+ * Refuse mission (expert action)
+ * Returns mission to admin queue
+ */
+export async function refuseMission(missionId: string): Promise<void> {
+    await updateMissionStatus(missionId, 'refused')
+}
+
+/**
+ * Get all available experts (active status, available)
+ * For admin to select when assigning missions
+ */
+export async function getAvailableExperts(): Promise<UserWithDetails[]> {
+    const db = getFirebaseFirestore()
+    const usersRef = collection(db, COLLECTIONS.USERS)
+    const q = query(
+        usersRef,
+        where('role', '==', 'expert'),
+        where('status', '==', 'active')
+    )
+    const querySnapshot = await getDocs(q)
+
+    const experts: UserWithDetails[] = []
+
+    for (const docSnap of querySnapshot.docs) {
+        const userData = docSnap.data()
+        const expertProfile = await getExpertProfile(docSnap.id)
+
+        // Only include available experts
+        if (expertProfile?.availability) {
+            experts.push({
+                uid: docSnap.id,
+                email: userData.email,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                phone: userData.phone,
+                role: userData.role,
+                status: userData.status,
+                createdAt: userData.createdAt?.toDate() || new Date(),
+                expertProfile
+            } as UserWithDetails)
+        }
+    }
+
+    return experts
+}
+
+/**
+ * Complete a mission (enterprise action)
+ * Changes status from accepted to completed
+ */
+export async function completeMission(
+    missionId: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const missionRef = doc(db, COLLECTIONS.MISSIONS, missionId)
+
+    await updateDoc(missionRef, {
+        status: 'completed',
+        completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
 }
