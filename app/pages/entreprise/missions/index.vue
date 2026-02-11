@@ -1,15 +1,16 @@
 <script setup lang="ts">
 /**
- * Enterprise Missions List Page - Redesigned UX/UI
+ * Enterprise Missions List Page - Grouped by Project
  * 
- * Improvements:
- * - Status-specific meaningful icons
- * - Quick status filters
+ * Features:
+ * - Missions grouped by project
+ * - Delete mission functionality
+ * - Status filters
  * - Expert info when assigned
- * - Better visual hierarchy
- * - Completion action for enterprise
  */
 import { useMissionsStore } from '~/stores/missions'
+import { useProjectsStore } from '~/stores/projects'
+import type { Project, MissionWithDetails } from '~/types'
 
 definePageMeta({
     layout: 'entreprise',
@@ -18,24 +19,33 @@ definePageMeta({
 
 const { user } = useAuth()
 const missionsStore = useMissionsStore()
+const projectsStore = useProjectsStore()
 
 // Active filter
 const activeFilter = ref<string>('all')
 
-// Mission completion state
+// Mission states
 const completingMission = ref<string | null>(null)
+const deletingMission = ref<string | null>(null)
+const cancellingExpert = ref<string | null>(null)
 
-// Fetch missions when user is available
+// Fetch missions and projects when user is available
 onMounted(async () => {
     if (user.value?.uid) {
-        await missionsStore.fetchMissionsByEnterprise(user.value.uid)
+        await Promise.all([
+            missionsStore.fetchMissionsByEnterprise(user.value.uid),
+            projectsStore.fetchProjects(user.value.uid)
+        ])
     }
 })
 
 // Watch for user changes
 watch(() => user.value?.uid, async (uid) => {
     if (uid) {
-        await missionsStore.fetchMissionsByEnterprise(uid)
+        await Promise.all([
+            missionsStore.fetchMissionsByEnterprise(uid),
+            projectsStore.fetchProjects(uid)
+        ])
     }
 })
 
@@ -51,6 +61,40 @@ async function handleCompleteMission(missionId: string) {
         }
     } finally {
         completingMission.value = null
+    }
+}
+
+// Handle cancel expert
+async function handleCancelExpert(missionId: string, expertId: string) {
+    if (!confirm('Êtes-vous sûr de vouloir annuler cet expert ?\n\nSa disponibilité sera désactivée et la mission retournera en attente d\'assignation.')) {
+        return
+    }
+    
+    cancellingExpert.value = missionId
+    try {
+        const success = await missionsStore.cancelExpert(missionId, expertId)
+        if (!success) {
+            alert('Erreur lors de l\'annulation de l\'expert')
+        }
+    } finally {
+        cancellingExpert.value = null
+    }
+}
+
+// Handle mission deletion
+async function handleDeleteMission(missionId: string, missionTitle: string) {
+    if (!confirm(`Êtes-vous sûr de vouloir supprimer la mission "${missionTitle}" ?\n\nCette action est irréversible.`)) {
+        return
+    }
+    
+    deletingMission.value = missionId
+    try {
+        const success = await missionsStore.deleteMission(missionId)
+        if (!success) {
+            alert('Erreur lors de la suppression de la mission')
+        }
+    } finally {
+        deletingMission.value = null
     }
 }
 
@@ -104,6 +148,23 @@ const filteredMissions = computed(() => {
     return missionsStore.missions.filter(m => m.status === activeFilter.value)
 })
 
+// Group missions by project
+const missionsByProject = computed(() => {
+    const grouped = new Map<string, { project: Project, missions: MissionWithDetails[] }>()
+    
+    filteredMissions.value.forEach(mission => {
+        if (!grouped.has(mission.projectId)) {
+            const project = projectsStore.projects.find(p => p.id === mission.projectId)
+            if (project) {
+                grouped.set(mission.projectId, { project, missions: [] })
+            }
+        }
+        grouped.get(mission.projectId)?.missions.push(mission)
+    })
+    
+    return Array.from(grouped.values())
+})
+
 // Status counts
 const statusCounts = computed(() => ({
     all: missionsStore.missions.length,
@@ -128,79 +189,79 @@ function formatDate(date: Date): string {
         <!-- Header -->
         <div class="mb-8">
             <h1 class="text-3xl font-bold text-slate-900 mb-2">Mes Missions</h1>
-            <p class="text-slate-600">Suivez l'avancement de toutes vos missions BIM</p>
+            <p class="text-slate-600">Suivez l'avancement de toutes vos missions BIM, organisées par projet</p>
         </div>
         
         <!-- Stats cards -->
-        <div v-if="!missionsStore.loading && missionsStore.missions.length > 0" class="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
+        <div v-if="!missionsStore.loading && missionsStore.missions.length > 0" class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-6">
             <button
                 type="button"
                 @click="activeFilter = 'all'"
                 :class="activeFilter === 'all' ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white hover:bg-slate-50'"
-                class="p-4 rounded-lg border border-slate-200 transition-all text-left"
+                class="p-3 rounded-lg border border-slate-200 transition-all text-left"
             >
-                <div class="flex items-center gap-2 mb-2">
-                    <Icon name="heroicons:briefcase" class="w-5 h-5 text-slate-600" />
+                <div class="flex items-center gap-2 mb-1">
+                    <Icon name="heroicons:briefcase" class="w-4 h-4 text-slate-600" />
                     <p class="text-xs font-medium text-slate-600">Toutes</p>
                 </div>
-                <p class="text-2xl font-bold text-slate-900">{{ statusCounts.all }}</p>
+                <p class="text-xl font-bold text-slate-900">{{ statusCounts.all }}</p>
             </button>
             
             <button
                 type="button"
                 @click="activeFilter = 'pending_admin'"
                 :class="activeFilter === 'pending_admin' ? 'ring-2 ring-amber-500 bg-amber-50' : 'bg-white hover:bg-slate-50'"
-                class="p-4 rounded-lg border border-slate-200 transition-all text-left"
+                class="p-3 rounded-lg border border-slate-200 transition-all text-left"
             >
-                <div class="flex items-center gap-2 mb-2">
-                    <Icon name="heroicons:clock" class="w-5 h-5 text-amber-600" />
+                <div class="flex items-center gap-2 mb-1">
+                    <Icon name="heroicons:clock" class="w-4 h-4 text-amber-600" />
                     <p class="text-xs font-medium text-amber-700">En attente</p>
                 </div>
-                <p class="text-2xl font-bold text-slate-900">{{ statusCounts.pending_admin }}</p>
+                <p class="text-xl font-bold text-slate-900">{{ statusCounts.pending_admin }}</p>
             </button>
             
             <button
                 type="button"
                 @click="activeFilter = 'proposed'"
                 :class="activeFilter === 'proposed' ? 'ring-2 ring-purple-500 bg-purple-50' : 'bg-white hover:bg-slate-50'"
-                class="p-4 rounded-lg border border-slate-200 transition-all text-left"
+                class="p-3 rounded-lg border border-slate-200 transition-all text-left"
             >
-                <div class="flex items-center gap-2 mb-2">
-                    <Icon name="heroicons:user-plus" class="w-5 h-5 text-purple-600" />
+                <div class="flex items-center gap-2 mb-1">
+                    <Icon name="heroicons:user-plus" class="w-4 h-4 text-purple-600" />
                     <p class="text-xs font-medium text-purple-700">Proposées</p>
                 </div>
-                <p class="text-2xl font-bold text-slate-900">{{ statusCounts.proposed }}</p>
+                <p class="text-xl font-bold text-slate-900">{{ statusCounts.proposed }}</p>
             </button>
             
             <button
                 type="button"
                 @click="activeFilter = 'accepted'"
                 :class="activeFilter === 'accepted' ? 'ring-2 ring-emerald-500 bg-emerald-50' : 'bg-white hover:bg-slate-50'"
-                class="p-4 rounded-lg border border-slate-200 transition-all text-left"
+                class="p-3 rounded-lg border border-slate-200 transition-all text-left"
             >
-                <div class="flex items-center gap-2 mb-2">
-                    <Icon name="heroicons:check-circle" class="w-5 h-5 text-emerald-600" />
+                <div class="flex items-center gap-2 mb-1">
+                    <Icon name="heroicons:check-circle" class="w-4 h-4 text-emerald-600" />
                     <p class="text-xs font-medium text-emerald-700">En cours</p>
                 </div>
-                <p class="text-2xl font-bold text-slate-900">{{ statusCounts.accepted }}</p>
+                <p class="text-xl font-bold text-slate-900">{{ statusCounts.accepted }}</p>
             </button>
             
             <button
                 type="button"
                 @click="activeFilter = 'completed'"
                 :class="activeFilter === 'completed' ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white hover:bg-slate-50'"
-                class="p-4 rounded-lg border border-slate-200 transition-all text-left"
+                class="p-3 rounded-lg border border-slate-200 transition-all text-left"
             >
-                <div class="flex items-center gap-2 mb-2">
-                    <Icon name="heroicons:trophy" class="w-5 h-5 text-blue-600" />
+                <div class="flex items-center gap-2 mb-1">
+                    <Icon name="heroicons:trophy" class="w-4 h-4 text-blue-600" />
                     <p class="text-xs font-medium text-blue-700">Terminées</p>
                 </div>
-                <p class="text-2xl font-bold text-slate-900">{{ statusCounts.completed }}</p>
+                <p class="text-xl font-bold text-slate-900">{{ statusCounts.completed }}</p>
             </button>
         </div>
         
         <!-- Loading state -->
-        <div v-if="missionsStore.loading" class="flex flex-col items-center justify-center py-20">
+        <div v-if="missionsStore.loading || projectsStore.loading" class="flex flex-col items-center justify-center py-20">
             <Icon name="heroicons:arrow-path" class="w-12 h-12 text-blue-600 animate-spin mb-4" />
             <p class="text-slate-600">Chargement de vos missions...</p>
         </div>
@@ -233,7 +294,7 @@ function formatDate(date: Date): string {
         </div>
         
         <!-- No filtered results -->
-        <div v-else-if="filteredMissions.length === 0" class="bg-white rounded-xl border border-slate-200 p-12 text-center">
+        <div v-else-if="missionsByProject.length === 0" class="bg-white rounded-xl border border-slate-200 p-12 text-center">
             <Icon name="heroicons:funnel" class="w-12 h-12 text-slate-300 mx-auto mb-4" />
             <h3 class="text-lg font-semibold text-slate-800 mb-2">Aucune mission {{ getMissionStatusConfig(activeFilter)?.label?.toLowerCase() || '' }}</h3>
             <button
@@ -245,71 +306,98 @@ function formatDate(date: Date): string {
             </button>
         </div>
         
-        <!-- Missions list -->
-        <div v-else class="space-y-4">
-            <div
-                v-for="mission in filteredMissions"
-                :key="mission.id"
-                class="bg-white rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:shadow-lg transition-all p-6"
-            >
-                <div class="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
-                    <!-- Mission info -->
-                    <div class="flex-1">
-                        <div class="flex items-center gap-3 mb-3">
-                            <div :class="[getMissionStatusConfig(mission.status)?.bg, getMissionStatusConfig(mission.status)?.text]" 
-                                 class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium">
-                                <Icon :name="getMissionStatusConfig(mission.status)?.icon || 'heroicons:question-mark-circle'" class="w-4 h-4" />
-                                {{ getMissionStatusConfig(mission.status)?.label || mission.status }}
+        <!-- Missions grouped by project -->
+        <div v-else class="space-y-8">
+            <div v-for="{ project, missions } in missionsByProject" :key="project.id">
+                <!-- Project Header -->
+                <div class="bg-white border-2 border-slate-200 border-b-0 rounded-t-xl px-4 py-3">
+                    <div class="flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                                <Icon name="heroicons:folder" class="w-4 h-4 text-blue-600" />
                             </div>
-                            <span class="text-sm text-slate-500">
-                                <Icon name="heroicons:calendar" class="w-4 h-4 inline mr-1" />
-                                {{ formatDate(mission.createdAt) }}
-                            </span>
+                            <div>
+                                <h2 class="text-base font-bold text-slate-900">{{ project.title }}</h2>
+                                <p class="text-xs text-slate-500">{{ missions.length }} mission(s)</p>
+                            </div>
                         </div>
-                        
-                        <h3 class="text-xl font-bold text-slate-900 mb-2">{{ mission.title }}</h3>
-                        <p class="text-slate-600 mb-4 leading-relaxed">{{ mission.description }}</p>
-                        
-                        <!-- Expert info (if assigned) -->
-                        <div v-if="mission.expertId" class="inline-flex items-center gap-2 text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">
-                            <Icon name="heroicons:user" class="w-4 h-4 text-blue-600" />
-                            <span class="font-medium">
-                                {{ (mission as any).expertName ? `Expert: ${(mission as any).expertName}` : 'Expert assigné' }}
-                            </span>
-                        </div>
-                    </div>
-                    
-                    <!-- Actions -->
-                    <div class="flex flex-col items-end gap-3">
                         <NuxtLink
-                            :to="`/entreprise/projets/${mission.projectId}`"
-                            class="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium transition-colors w-full sm:w-auto justify-center"
+                            :to="`/entreprise/projets/${project.id}`"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-sm font-medium transition-colors"
                         >
-                            <Icon name="heroicons:folder-open" class="w-5 h-5" />
+                            <Icon name="heroicons:folder-open" class="w-4 h-4" />
                             Voir le projet
                         </NuxtLink>
-                        
-                        <!-- Complete mission button (only if active/accepted) -->
-                        <button
-                            v-if="mission.status === 'accepted'"
-                            type="button"
-                            @click="handleCompleteMission(mission.id)"
-                            :disabled="completingMission === mission.id"
-                            class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors w-full sm:w-auto justify-center disabled:opacity-50"
-                        >
-                            <Icon v-if="completingMission === mission.id" name="heroicons:arrow-path" class="w-5 h-5 animate-spin" />
-                            <Icon v-else name="heroicons:check-badge" class="w-5 h-5" />
-                            Marquer terminée
-                        </button>
                     </div>
                 </div>
                 
-                <!-- Status description -->
-                <div class="mt-4 pt-4 border-t border-slate-100">
-                    <p class="text-sm text-slate-500">
-                        <Icon name="heroicons:information-circle" class="w-4 h-4 inline mr-1" />
-                        {{ getMissionStatusConfig(mission.status)?.description || 'Mission en cours de traitement' }}
-                    </p>
+                <!-- Missions List -->
+                <div class="bg-white rounded-b-xl border-2 border-t-0 border-slate-200 divide-y divide-slate-100">
+                    <div
+                        v-for="mission in missions"
+                        :key="mission.id"
+                        class="px-4 py-3 hover:bg-slate-50 transition-colors"
+                    >
+                        <!-- Row 1: Status + Title + Date + Actions (compact single row) -->
+                        <div class="flex items-center gap-3">
+                            <!-- Status badge (compact) -->
+                            <div :class="[getMissionStatusConfig(mission.status)?.bg, getMissionStatusConfig(mission.status)?.text]" 
+                                 class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold whitespace-nowrap">
+                                <Icon :name="getMissionStatusConfig(mission.status)?.icon || 'heroicons:question-mark-circle'" class="w-3.5 h-3.5" />
+                                {{ getMissionStatusConfig(mission.status)?.label || mission.status }}
+                            </div>
+                            
+                            <!-- Title + description -->
+                            <div class="flex-1 min-w-0">
+                                <h3 class="text-sm font-semibold text-slate-900 truncate">{{ mission.title }}</h3>
+                                <p class="text-xs text-slate-500 truncate">{{ mission.description }}</p>
+                            </div>
+                            
+                            <!-- Expert info (compact, only when accepted+) -->
+                            <div v-if="mission.expertId && mission.status !== 'proposed'" class="hidden sm:flex items-center gap-1.5 text-xs text-slate-600 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 whitespace-nowrap">
+                                <Icon name="heroicons:user" class="w-3.5 h-3.5 text-emerald-600" />
+                                <span class="font-medium text-emerald-700">
+                                    {{ mission.expertName || 'Expert assigné' }}
+                                </span>
+                            </div>
+                            
+                            <!-- Date -->
+                            <span class="hidden md:inline-flex items-center gap-1 text-xs text-slate-400 whitespace-nowrap">
+                                <Icon name="heroicons:calendar" class="w-3.5 h-3.5" />
+                                {{ formatDate(mission.createdAt) }}
+                            </span>
+                            
+                            <!-- Action buttons (compact, inline) -->
+                            <div class="flex items-center gap-1.5">
+                                <!-- Complete mission (accepted only) -->
+                                <button
+                                    v-if="mission.status === 'accepted'"
+                                    type="button"
+                                    @click="handleCompleteMission(mission.id)"
+                                    :disabled="completingMission === mission.id"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50 whitespace-nowrap"
+                                    title="Marquer terminée"
+                                >
+                                    <Icon v-if="completingMission === mission.id" name="heroicons:arrow-path" class="w-3.5 h-3.5 animate-spin" />
+                                    <Icon v-else name="heroicons:check-badge" class="w-3.5 h-3.5" />
+                                    Terminée
+                                </button>
+
+                                
+                                <!-- Delete button -->
+                                <button
+                                    type="button"
+                                    @click="handleDeleteMission(mission.id, mission.title)"
+                                    :disabled="deletingMission === mission.id"
+                                    class="inline-flex items-center justify-center w-8 h-8 bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-700 rounded-lg transition-colors disabled:opacity-50"
+                                    title="Supprimer cette mission"
+                                >
+                                    <Icon v-if="deletingMission === mission.id" name="heroicons:arrow-path" class="w-3.5 h-3.5 animate-spin" />
+                                    <Icon v-else name="heroicons:trash" class="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -1,14 +1,17 @@
 <script setup lang="ts">
 /**
- * Admin Missions Page - Redesigned UX/UI
+ * Admin Missions Page - Full Dashboard
  * 
- * Improvements:
- * - Enterprise info card for each mission
- * - Expert skills/availability in dropdown
- * - Mission details preview
- * - Better visual hierarchy
+ * Complete vision & control over ALL missions:
+ * - View all missions across all statuses
+ * - Filter by status tabs
+ * - Assign experts to pending missions
+ * - Cancel expert assignments
+ * - Delete missions
+ * - See enterprise, project, and expert info
  */
 import { useMissionsStore } from '~/stores/missions'
+import type { MissionWithDetails } from '~/types'
 
 definePageMeta({
     layout: 'admin',
@@ -17,17 +20,80 @@ definePageMeta({
 
 const missionsStore = useMissionsStore()
 
-// Fetch pending missions on mount
+// Active status filter tab
+const activeTab = ref<string>('all')
+
+// Search query
+const searchQuery = ref('')
+
+// Fetch all missions on mount
 onMounted(async () => {
-    await missionsStore.fetchPendingMissions()
+    await missionsStore.fetchAllMissions()
     await missionsStore.fetchAvailableExperts()
 })
 
-// Selected expert for assignment
+// Status tabs config
+const statusTabs = [
+    { key: 'all', label: 'Toutes', icon: 'heroicons:squares-2x2', color: 'blue' },
+    { key: 'pending_admin', label: 'En attente', icon: 'heroicons:clock', color: 'amber' },
+    { key: 'proposed', label: 'Proposées', icon: 'heroicons:paper-airplane', color: 'violet' },
+    { key: 'accepted', label: 'En cours', icon: 'heroicons:play-circle', color: 'emerald' },
+    { key: 'completed', label: 'Terminées', icon: 'heroicons:check-circle', color: 'slate' },
+]
+
+// Status config for badges
+const statusConfig: Record<string, { label: string; bg: string; text: string; dot: string }> = {
+    pending_admin: { label: 'En attente', bg: 'bg-amber-100', text: 'text-amber-700', dot: 'bg-amber-500' },
+    proposed: { label: 'Proposée', bg: 'bg-violet-100', text: 'text-violet-700', dot: 'bg-violet-500' },
+    accepted: { label: 'En cours', bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
+    refused: { label: 'Refusée', bg: 'bg-red-100', text: 'text-red-700', dot: 'bg-red-500' },
+    completed: { label: 'Terminée', bg: 'bg-slate-100', text: 'text-slate-700', dot: 'bg-slate-500' },
+}
+
+// Count missions by status
+function countByStatus(status: string): number {
+    if (status === 'all') return missionsStore.missions.length
+    return missionsStore.missions.filter(m => m.status === status).length
+}
+
+// Filtered missions
+const filteredMissions = computed(() => {
+    let missions = missionsStore.missions as MissionWithDetails[]
+    
+    // Filter by status tab
+    if (activeTab.value !== 'all') {
+        missions = missions.filter(m => m.status === activeTab.value)
+    }
+    
+    // Filter by search query
+    if (searchQuery.value.trim()) {
+        const q = searchQuery.value.toLowerCase()
+        missions = missions.filter(m =>
+            m.title.toLowerCase().includes(q) ||
+            m.description?.toLowerCase().includes(q) ||
+            m.enterpriseName?.toLowerCase().includes(q) ||
+            m.projectTitle?.toLowerCase().includes(q) ||
+            m.expertName?.toLowerCase().includes(q)
+        )
+    }
+    
+    // Sort: pending first, then by date desc
+    return [...missions].sort((a, b) => {
+        const statusOrder: Record<string, number> = { pending_admin: 0, proposed: 1, accepted: 2, completed: 3 }
+        const aOrder = statusOrder[a.status] ?? 4
+        const bOrder = statusOrder[b.status] ?? 4
+        if (aOrder !== bOrder) return aOrder - bOrder
+        return b.createdAt.getTime() - a.createdAt.getTime()
+    })
+})
+
+// Selected expert for assignment per mission
 const selectedExpert = ref<Record<string, string>>({})
 
-// Assigning state per mission
+// Action states
 const assigningMission = ref<string | null>(null)
+const cancellingMission = ref<string | null>(null)
+const deletingMission = ref<string | null>(null)
 
 // Assign expert to mission
 async function handleAssignExpert(missionId: string) {
@@ -38,14 +104,51 @@ async function handleAssignExpert(missionId: string) {
     try {
         const success = await missionsStore.assignExpert(missionId, expertId)
         if (success) {
-            // Refresh the list
-            await missionsStore.fetchPendingMissions()
-            // Clear selection
+            // Refresh all missions
+            await missionsStore.fetchAllMissions()
+            await missionsStore.fetchAvailableExperts()
             delete selectedExpert.value[missionId]
         }
     } finally {
         assigningMission.value = null
     }
+}
+
+// Cancel expert from mission
+async function handleCancelExpert(missionId: string, expertId: string) {
+    if (!confirm('Voulez-vous vraiment retirer cet expert de cette mission ?')) return
+    
+    cancellingMission.value = missionId
+    try {
+        const success = await missionsStore.cancelExpert(missionId, expertId)
+        if (success) {
+            await missionsStore.fetchAllMissions()
+            await missionsStore.fetchAvailableExperts()
+        }
+    } finally {
+        cancellingMission.value = null
+    }
+}
+
+// Delete mission
+async function handleDeleteMission(missionId: string) {
+    if (!confirm('Voulez-vous vraiment supprimer cette mission ? Cette action est irréversible.')) return
+    
+    deletingMission.value = missionId
+    try {
+        const success = await missionsStore.deleteMission(missionId)
+        if (success) {
+            await missionsStore.fetchAllMissions()
+        }
+    } finally {
+        deletingMission.value = null
+    }
+}
+
+// Refresh data
+async function refreshData() {
+    await missionsStore.fetchAllMissions()
+    await missionsStore.fetchAvailableExperts()
 }
 
 // Format date
@@ -57,186 +160,328 @@ function formatDate(date: Date): string {
     }).format(date)
 }
 
-// Get expert initials
-function getExpertInitials(expert: any): string {
-    return `${expert.firstName?.charAt(0) || ''}${expert.lastName?.charAt(0) || ''}`
+// Expanded mission panels
+const expandedMissions = ref<Set<string>>(new Set())
+
+function toggleExpand(missionId: string) {
+    if (expandedMissions.value.has(missionId)) {
+        expandedMissions.value.delete(missionId)
+    } else {
+        expandedMissions.value.add(missionId)
+    }
 }
 </script>
 
 <template>
     <div class="max-w-7xl mx-auto">
         <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-slate-900 mb-2">Assignation des Missions</h1>
-            <p class="text-slate-600">Affectez des experts BIM qualifiés aux missions des entreprises</p>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Gestion des Missions</h1>
+                <p class="text-sm text-slate-500 mt-1">Vision complète et contrôle de toutes les missions</p>
+            </div>
+            <button
+                @click="refreshData"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
+                :disabled="missionsStore.loading"
+            >
+                <Icon name="heroicons:arrow-path" class="w-4 h-4" :class="{ 'animate-spin': missionsStore.loading }" />
+                Actualiser
+            </button>
         </div>
-        
-        <!-- Stats -->
-        <div v-if="!missionsStore.loading" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-            <div class="bg-white rounded-lg border border-slate-200 p-5">
-                <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-lg bg-amber-100 flex items-center justify-center">
-                        <Icon name="heroicons:clock" class="w-6 h-6 text-amber-600" />
-                    </div>
-                    <div>
-                        <p class="text-2xl font-bold text-slate-900">{{ missionsStore.missions.length }}</p>
-                        <p class="text-sm text-slate-600">Missions en attente</p>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-white rounded-lg border border-slate-200 p-5">
-                <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center">
-                        <Icon name="heroicons:user-group" class="w-6 h-6 text-emerald-600" />
-                    </div>
-                    <div>
-                        <p class="text-2xl font-bold text-slate-900">{{ missionsStore.availableExperts.length }}</p>
-                        <p class="text-sm text-slate-600">Experts disponibles</p>
-                    </div>
-                </div>
-            </div>
-            <div class="bg-white rounded-lg border border-slate-200 p-5">
-                <div class="flex items-center gap-3">
-                    <div class="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
-                        <Icon name="heroicons:building-office" class="w-6 h-6 text-blue-600" />
-                    </div>
-                    <div>
-                        <p class="text-2xl font-bold text-slate-900">{{ new Set(missionsStore.missions.map(m => m.enterpriseId)).size }}</p>
-                        <p class="text-sm text-slate-600">Entreprises actives</p>
+
+        <!-- Stats Cards -->
+        <div v-if="!missionsStore.loading" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
+            <button
+                v-for="tab in statusTabs"
+                :key="tab.key"
+                @click="activeTab = tab.key"
+                class="relative bg-white rounded-xl border-2 p-4 text-left transition-all hover:shadow-md"
+                :class="activeTab === tab.key ? `border-${tab.color}-400 shadow-md ring-1 ring-${tab.color}-200` : 'border-slate-200'"
+            >
+                <div class="flex items-center gap-2 mb-2">
+                    <div class="w-8 h-8 rounded-lg flex items-center justify-center"
+                        :class="{
+                            'bg-blue-100': tab.color === 'blue',
+                            'bg-amber-100': tab.color === 'amber',
+                            'bg-violet-100': tab.color === 'violet',
+                            'bg-emerald-100': tab.color === 'emerald',
+                            'bg-slate-100': tab.color === 'slate',
+                        }"
+                    >
+                        <Icon :name="tab.icon" class="w-4 h-4"
+                            :class="{
+                                'text-blue-600': tab.color === 'blue',
+                                'text-amber-600': tab.color === 'amber',
+                                'text-violet-600': tab.color === 'violet',
+                                'text-emerald-600': tab.color === 'emerald',
+                                'text-slate-600': tab.color === 'slate',
+                            }"
+                        />
                     </div>
                 </div>
+                <p class="text-2xl font-bold text-slate-900">{{ countByStatus(tab.key) }}</p>
+                <p class="text-xs text-slate-500 mt-0.5">{{ tab.label }}</p>
+                <!-- Active indicator -->
+                <div v-if="activeTab === tab.key" class="absolute bottom-0 left-4 right-4 h-0.5 rounded-full"
+                    :class="{
+                        'bg-blue-500': tab.color === 'blue',
+                        'bg-amber-500': tab.color === 'amber',
+                        'bg-violet-500': tab.color === 'violet',
+                        'bg-emerald-500': tab.color === 'emerald',
+                        'bg-slate-500': tab.color === 'slate',
+                    }"
+                ></div>
+            </button>
+        </div>
+
+        <!-- Search bar -->
+        <div class="mb-5">
+            <div class="relative">
+                <Icon name="heroicons:magnifying-glass" class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                    v-model="searchQuery"
+                    type="text"
+                    placeholder="Rechercher par titre, entreprise, projet ou expert..."
+                    class="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-slate-400"
+                />
+                <button
+                    v-if="searchQuery"
+                    @click="searchQuery = ''"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                    <Icon name="heroicons:x-mark" class="w-4 h-4" />
+                </button>
             </div>
         </div>
-        
+
         <!-- Loading state -->
         <div v-if="missionsStore.loading" class="flex flex-col items-center justify-center py-20">
-            <Icon name="heroicons:arrow-path" class="w-12 h-12 text-blue-600 animate-spin mb-4" />
-            <p class="text-slate-600">Chargement des missions...</p>
+            <Icon name="heroicons:arrow-path" class="w-10 h-10 text-blue-600 animate-spin mb-3" />
+            <p class="text-slate-500 text-sm">Chargement des missions...</p>
         </div>
-        
+
         <!-- Error state -->
         <div v-else-if="missionsStore.error" class="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-            <Icon name="heroicons:exclamation-circle" class="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <Icon name="heroicons:exclamation-circle" class="w-10 h-10 text-red-500 mx-auto mb-3" />
             <h3 class="text-lg font-semibold text-red-900 mb-2">Erreur de chargement</h3>
-            <p class="text-red-700">{{ missionsStore.error }}</p>
+            <p class="text-red-700 text-sm">{{ missionsStore.error }}</p>
+            <button @click="refreshData" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
+                Réessayer
+            </button>
         </div>
-        
+
         <!-- Empty state -->
-        <div v-else-if="missionsStore.missions.length === 0" class="bg-gradient-to-br from-emerald-50 to-blue-50 rounded-2xl border-2 border-dashed border-emerald-200 p-12 text-center">
-            <div class="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <Icon name="heroicons:check-circle" class="w-10 h-10 text-emerald-600" />
+        <div v-else-if="filteredMissions.length === 0" class="bg-slate-50 rounded-xl border border-slate-200 p-12 text-center">
+            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Icon name="heroicons:inbox" class="w-8 h-8 text-slate-400" />
             </div>
-            <h3 class="text-2xl font-bold text-slate-900 mb-3">Tout est à jour !</h3>
+            <h3 class="text-lg font-semibold text-slate-700 mb-1">
+                {{ searchQuery ? 'Aucun résultat' : 'Aucune mission' }}
+            </h3>
+            <p class="text-sm text-slate-500">
+                {{ searchQuery ? 'Essayez un autre terme de recherche' : 'Il n\'y a aucune mission dans cette catégorie' }}
+            </p>
         </div>
-        
-        <!-- Missions list -->
-        <div v-else class="space-y-6">
+
+        <!-- Missions Table -->
+        <div v-else class="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <!-- Table Header -->
+            <div class="hidden lg:grid lg:grid-cols-12 gap-2 px-5 py-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <div class="col-span-3">Mission</div>
+                <div class="col-span-2">Entreprise</div>
+                <div class="col-span-2">Projet</div>
+                <div class="col-span-2">Expert</div>
+                <div class="col-span-2">Statut</div>
+                <div class="col-span-1"></div>
+            </div>
+
+            <!-- Mission Rows -->
             <div
-                v-for="mission in missionsStore.missions"
+                v-for="(mission, index) in filteredMissions"
                 :key="mission.id"
-                class="bg-white rounded-xl border-2 border-slate-200 shadow-sm overflow-hidden"
+                class="border-b border-slate-100 last:border-0"
             >
-                <!-- Mission header with enterprise info -->
-                <div class="bg-gradient-to-r from-slate-50 to-blue-50 px-6 py-4 border-b border-slate-200">
-                    <div class="flex items-start justify-between gap-4">
-                        <div class="flex items-start gap-4 flex-1">
-                            <div class="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                <Icon name="heroicons:building-office-2" class="w-6 h-6 text-blue-600" />
-                            </div>
-                            <div class="flex-1">
-                                <p class="text-xs font-medium text-slate-500 mb-1">Entreprise</p>
-                                <p class="font-semibold text-slate-900">Nom de l'entreprise</p>
-                                <p class="text-sm text-slate-600 mt-1">
-                                    <Icon name="heroicons:calendar" class="w-4 h-4 inline mr-1" />
-                                    Demandée le {{ formatDate(mission.createdAt) }}
-                                </p>
-                            </div>
-                        </div>
-                        <div class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-100 text-amber-700 rounded-full text-sm font-medium">
-                            <Icon name="heroicons:clock" class="w-4 h-4" />
-                            En attente
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Mission details -->
-                <div class="p-6">
-                    <h3 class="text-xl font-bold text-slate-900 mb-3">{{ mission.title }}</h3>
-                    <p class="text-slate-600 leading-relaxed mb-6">{{ mission.description }}</p>
-                    
-                    <!-- Expert assignment section -->
-                    <div class="bg-slate-50 rounded-lg p-5 border border-slate-200">
-                        <div class="flex items-start gap-4">
-                            <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
-                                <Icon name="heroicons:user-plus" class="w-5 h-5 text-blue-600" />
-                            </div>
-                            <div class="flex-1">
-                                <p class="font-semibold text-slate-900 mb-1">Assigner un expert BIM</p>
-                                <p class="text-sm text-slate-600 mb-4">Sélectionnez un expert disponible pour cette mission</p>
-                                
-                                <div v-if="missionsStore.availableExperts.length === 0" class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-center">
-                                    <Icon name="heroicons:exclamation-triangle" class="w-6 h-6 text-amber-500 mx-auto mb-2" />
-                                    <p class="text-sm text-amber-700 font-medium">Aucun expert disponible</p>
-                                </div>
-                                
-                                <div v-else class="space-y-3">
-                                    <select
-                                        v-model="selectedExpert[mission.id]"
-                                        class="w-full px-4 py-3 border-2 border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-medium"
-                                    >
-                                        <option value="">Sélectionner un expert...</option>
-                                        <option 
-                                            v-for="expert in missionsStore.availableExperts" 
-                                            :key="expert.uid" 
-                                            :value="expert.uid"
-                                        >
-                                            {{ expert.firstName }} {{ expert.lastName }}
-                                        </option>
-                                    </select>
-                                    
-                                    <button
-                                        type="button"
-                                        class="w-full inline-flex items-center justify-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                        :disabled="!selectedExpert[mission.id] || assigningMission === mission.id"
-                                        @click="handleAssignExpert(mission.id)"
-                                    >
-                                        <Icon 
-                                            v-if="assigningMission === mission.id" 
-                                            name="heroicons:arrow-path" 
-                                            class="w-5 h-5 animate-spin" 
-                                        />
-                                        <Icon v-else name="heroicons:check-circle" class="w-5 h-5" />
-                                        {{ assigningMission === mission.id ? 'Assignation en cours...' : 'Assigner cette mission' }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Available experts panel -->
-        <div v-if="missionsStore.availableExperts.length > 0 && !missionsStore.loading" class="mt-8 bg-white rounded-xl border border-slate-200 p-6">
-            <div class="flex items-center gap-3 mb-4">
-                <Icon name="heroicons:user-group" class="w-6 h-6 text-emerald-600" />
-                <h3 class="text-lg font-semibold text-slate-900">Experts BIM disponibles</h3>
-            </div>
-            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                <div 
-                    v-for="expert in missionsStore.availableExperts" 
-                    :key="expert.uid"
-                    class="flex flex-col items-center gap-2 p-3 bg-slate-50 rounded-lg border border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-all"
+                <!-- Main Row -->
+                <div
+                    class="grid grid-cols-1 lg:grid-cols-12 gap-2 lg:gap-2 px-5 py-3.5 items-center hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    @click="toggleExpand(mission.id)"
                 >
-                    <div class="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 text-white flex items-center justify-center text-sm font-bold">
-                        {{ getExpertInitials(expert) }}
+                    <!-- Mission Title -->
+                    <div class="lg:col-span-3 flex items-center gap-2 min-w-0">
+                        <Icon
+                            name="heroicons:chevron-right"
+                            class="w-3.5 h-3.5 text-slate-400 transition-transform flex-shrink-0 hidden lg:block"
+                            :class="{ 'rotate-90': expandedMissions.has(mission.id) }"
+                        />
+                        <div class="min-w-0 flex-1">
+                            <p class="font-semibold text-slate-900 text-sm truncate">{{ mission.title }}</p>
+                            <p class="text-xs text-slate-400">{{ formatDate(mission.createdAt) }}</p>
+                        </div>
                     </div>
-                    <div class="text-center">
-                        <p class="text-sm font-semibold text-slate-900">{{ expert.firstName }}</p>
-                        <p class="text-xs text-slate-600">{{ expert.lastName }}</p>
+
+                    <!-- Enterprise -->
+                    <div class="lg:col-span-2 min-w-0">
+                        <p class="text-sm text-slate-700 truncate" :title="mission.enterpriseName">{{ mission.enterpriseName || '...' }}</p>
+                    </div>
+
+                    <!-- Project -->
+                    <div class="lg:col-span-2 min-w-0">
+                        <p class="text-sm text-slate-600 truncate" :title="mission.projectTitle">{{ mission.projectTitle || '...' }}</p>
+                    </div>
+
+                    <!-- Expert -->
+                    <div class="lg:col-span-2 min-w-0">
+                        <p v-if="mission.expertId && mission.expertName" class="text-sm text-emerald-700 font-medium truncate" :title="mission.expertName">
+                            {{ mission.expertName }}
+                        </p>
+                        <p v-else class="text-sm text-slate-400 italic">—</p>
+                    </div>
+
+                    <!-- Status -->
+                    <div class="lg:col-span-2">
+                        <span
+                            class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap"
+                            :class="[statusConfig[mission.status]?.bg, statusConfig[mission.status]?.text]"
+                        >
+                            <span class="w-1.5 h-1.5 rounded-full" :class="statusConfig[mission.status]?.dot"></span>
+                            {{ statusConfig[mission.status]?.label || mission.status }}
+                        </span>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="lg:col-span-1 flex items-center justify-end gap-1" @click.stop>
+                        <!-- Cancel Expert (for proposed/accepted) -->
+                        <button
+                            v-if="mission.expertId && (mission.status === 'proposed' || mission.status === 'accepted')"
+                            @click="handleCancelExpert(mission.id, mission.expertId!)"
+                            :disabled="cancellingMission === mission.id"
+                            class="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                            title="Retirer l'expert"
+                        >
+                            <Icon v-if="cancellingMission === mission.id" name="heroicons:arrow-path" class="w-4 h-4 animate-spin" />
+                            <Icon v-else name="heroicons:user-minus" class="w-4 h-4" />
+                        </button>
+
+                        <!-- Expand toggle -->
+                        <button
+                            @click="toggleExpand(mission.id)"
+                            class="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors lg:hidden"
+                        >
+                            <Icon name="heroicons:chevron-down" class="w-4 h-4" :class="{ 'rotate-180': expandedMissions.has(mission.id) }" />
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Expanded Panel -->
+                <div v-if="expandedMissions.has(mission.id)" class="px-5 pb-5">
+                    <div class="bg-slate-50 rounded-lg border border-slate-200 p-5 space-y-4">
+                        <!-- Description -->
+                        <div>
+                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Description</p>
+                            <p class="text-sm text-slate-700 leading-relaxed">{{ mission.description || 'Aucune description' }}</p>
+                        </div>
+
+                        <!-- Info grid -->
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Entreprise</p>
+                                <div class="flex items-center gap-2">
+                                    <Icon name="heroicons:building-office-2" class="w-4 h-4 text-blue-600" />
+                                    <span class="text-sm font-medium text-slate-900">{{ mission.enterpriseName || 'Chargement...' }}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Projet</p>
+                                <div class="flex items-center gap-2">
+                                    <Icon name="heroicons:folder" class="w-4 h-4 text-indigo-600" />
+                                    <span class="text-sm font-medium text-slate-900">{{ mission.projectTitle || 'Chargement...' }}</span>
+                                </div>
+                            </div>
+                            <div>
+                                <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Expert assigné</p>
+                                <div v-if="mission.expertName" class="flex items-center gap-2">
+                                    <Icon name="heroicons:user" class="w-4 h-4 text-emerald-600" />
+                                    <span class="text-sm font-medium text-emerald-700">{{ mission.expertName }}</span>
+                                </div>
+                                <span v-else class="text-sm text-slate-400 italic">Aucun expert assigné</span>
+                            </div>
+                        </div>
+
+                        <!-- Date info -->
+                        <div class="flex items-center gap-4 text-xs text-slate-500">
+                            <span><strong>Créée:</strong> {{ formatDate(mission.createdAt) }}</span>
+                            <span><strong>Modifiée:</strong> {{ formatDate(mission.updatedAt) }}</span>
+                        </div>
+
+                        <!-- Expert Assignment Section (only for pending_admin) -->
+                        <div v-if="mission.status === 'pending_admin'" class="border-t border-slate-200 pt-4">
+                            <p class="text-sm font-semibold text-slate-800 mb-3">
+                                <Icon name="heroicons:user-plus" class="w-4 h-4 inline mr-1 text-blue-600" />
+                                Assigner un expert
+                            </p>
+                            
+                            <div v-if="missionsStore.availableExperts.length === 0" class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-center">
+                                <p class="text-xs text-amber-700 font-medium">Aucun expert disponible actuellement</p>
+                            </div>
+                            
+                            <div v-else class="flex flex-col sm:flex-row gap-3">
+                                <select
+                                    v-model="selectedExpert[mission.id]"
+                                    class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                    @click.stop
+                                >
+                                    <option value="">Sélectionner un expert...</option>
+                                    <option 
+                                        v-for="expert in missionsStore.availableExperts" 
+                                        :key="expert.uid" 
+                                        :value="expert.uid"
+                                    >
+                                        {{ expert.firstName }} {{ expert.lastName }} ({{ expert.email }})
+                                    </option>
+                                </select>
+                                
+                                <button
+                                    type="button"
+                                    class="inline-flex items-center justify-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                                    :disabled="!selectedExpert[mission.id] || assigningMission === mission.id"
+                                    @click.stop="handleAssignExpert(mission.id)"
+                                >
+                                    <Icon 
+                                        v-if="assigningMission === mission.id" 
+                                        name="heroicons:arrow-path" 
+                                        class="w-4 h-4 animate-spin" 
+                                    />
+                                    <Icon v-else name="heroicons:check" class="w-4 h-4" />
+                                    {{ assigningMission === mission.id ? 'Assignation...' : 'Assigner' }}
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Cancel Expert Section (for proposed/accepted) -->
+                        <div v-if="mission.expertId && (mission.status === 'proposed' || mission.status === 'accepted')" class="border-t border-slate-200 pt-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm font-medium text-slate-800">Expert actuel: <span class="text-emerald-700">{{ mission.expertName }}</span></p>
+                                    <p class="text-xs text-slate-500 mt-0.5">
+                                        {{ mission.status === 'proposed' ? 'En attente de réponse de l\'expert' : 'Mission en cours' }}
+                                    </p>
+                                </div>
+                                <button
+                                    @click.stop="handleCancelExpert(mission.id, mission.expertId!)"
+                                    :disabled="cancellingMission === mission.id"
+                                    class="inline-flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-sm font-medium hover:bg-amber-100 transition-colors disabled:opacity-50"
+                                >
+                                    <Icon v-if="cancellingMission === mission.id" name="heroicons:arrow-path" class="w-4 h-4 animate-spin" />
+                                    <Icon v-else name="heroicons:user-minus" class="w-4 h-4" />
+                                    Retirer l'expert
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
+
     </div>
 </template>

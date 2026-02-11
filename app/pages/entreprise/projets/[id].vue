@@ -23,25 +23,55 @@ const missionsStore = useMissionsStore()
 
 const projectId = computed(() => route.params.id as string)
 
-// Fetch project and missions
+// Load data on mount, only after user is authenticated
 onMounted(async () => {
-    if (projectId.value) {
-        await Promise.all([
-            projectsStore.fetchProject(projectId.value),
-            missionsStore.fetchMissionsByProject(projectId.value)
-        ])
+    const id = projectId.value
+    if (!id) return
+    
+    // Wait for user to be authenticated (middleware ensures this)
+    // Add a small delay to ensure auth is fully ready
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    if (user.value?.uid) {
+        try {
+            await Promise.all([
+                projectsStore.fetchProject(id),
+                missionsStore.fetchMissionsByProject(id)
+            ])
+        } catch (err) {
+            console.error('Error loading project data:', err)
+        }
     }
 })
 
-// Watch for project ID changes
-watch(projectId, async (newId) => {
-    if (newId) {
-        await Promise.all([
-            projectsStore.fetchProject(newId),
-            missionsStore.fetchMissionsByProject(newId)
-        ])
+// Watch for project ID changes (when navigating between projects)
+watch(projectId, async (newId, oldId) => {
+    if (newId && newId !== oldId && user.value?.uid) {
+        try {
+            await Promise.all([
+                projectsStore.fetchProject(newId),
+                missionsStore.fetchMissionsByProject(newId)
+            ])
+        } catch (err) {
+            console.error('Error loading project data:', err)
+        }
     }
 })
+
+// Watch route to refresh missions when coming back from mission creation  
+// This triggers on navigation but missions in store persist during reload
+watch(() => route.path, async (newPath, oldPath) => {
+    // If we're on project details page and coming from mission create page
+    if (newPath.startsWith('/entreprise/projets/') && 
+        !newPath.includes('/create') && 
+        oldPath?.includes('/missions/create') &&
+        projectId.value) {
+        // Silently refresh missions - they won't flash because store keeps old data during loading
+        await missionsStore.fetchMissionsByProject(projectId.value)
+    }
+})
+
+
 
 // Format date
 function formatDate(date: Date): string {

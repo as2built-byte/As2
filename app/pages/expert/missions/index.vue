@@ -194,147 +194,109 @@ function getStatusConfig(status: string) {
             </div>
             
             <!-- Missions content -->
-            <div v-else class="p-6 space-y-4">
-                <!-- Invitations (prominent cards) -->
+            <div v-else class="divide-y divide-slate-100">
+                <!-- Invitations (compact cards) -->
                 <template v-if="activeTab === 'invitations'">
                     <div
                         v-for="mission in currentMissions"
                         :key="mission.id"
-                        class="bg-gradient-to-r from-purple-50 to-blue-50 rounded-xl border-2 border-purple-200 p-6 shadow-sm"
+                        class="px-4 sm:px-6 py-4 hover:bg-purple-50/30 transition-colors"
                     >
-                        <div class="flex items-start gap-4 mb-4">
-                            <div class="w-14 h-14 rounded-xl bg-purple-100 flex items-center justify-center flex-shrink-0">
-                                <Icon name="heroicons:inbox" class="w-7 h-7 text-purple-600" />
-                            </div>
-                            <div class="flex-1">
-                                <div class="flex items-center gap-2 mb-2">
-                                    <span class="inline-flex items-center gap-1.5 px-3 py-1 bg-purple-600 text-white rounded-full text-xs font-bold">
-                                        <Icon name="heroicons:sparkles" class="w-3.5 h-3.5" />
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <!-- Info -->
+                            <div class="flex-1 min-w-0">
+                                <div class="flex flex-wrap items-center gap-2 mb-1.5">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 bg-purple-600 text-white rounded-full text-xs font-bold">
                                         NOUVELLE INVITATION
                                     </span>
-                                    <span class="text-sm text-slate-600">
-                                        <Icon name="heroicons:calendar" class="w-4 h-4 inline mr-1" />
-                                        {{ formatDate(mission.createdAt) }}
-                                    </span>
+                                    <span class="text-xs text-slate-500">{{ formatDate(mission.createdAt) }}</span>
                                 </div>
-                                <h3 class="text-2xl font-bold text-slate-900 mb-2">{{ mission.title }}</h3>
-                                <p class="text-slate-700 leading-relaxed mb-4">{{ mission.description }}</p>
+                                <h3 class="text-base font-bold text-slate-900 truncate">{{ mission.title }}</h3>
+                                <p class="text-sm text-slate-600 line-clamp-1 mt-0.5 mb-2">{{ mission.description }}</p>
                                 
-                                <!-- Enterprise info -->
-                                <div class="bg-white rounded-lg border border-purple-200 p-4 mb-4">
-                                    <div class="flex items-center gap-3">
-                                        <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
-                                            <Icon name="heroicons:building-office" class="w-5 h-5 text-blue-600" />
-                                        </div>
-                                        <div>
-                                            <p class="text-xs text-slate-500 font-medium">Entreprise</p>
-                                            <p class="font-semibold text-slate-900">{{ (mission as any).enterpriseName || 'Entreprise inconnue' }}</p>
-                                        </div>
-                                    </div>
+                                <div class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
+                                    <Icon name="heroicons:building-office-2" class="w-4 h-4 text-purple-600" />
+                                    {{ (mission as any).enterpriseName || 'Entreprise inconnue' }}
                                 </div>
-                                
-                                <!-- Action buttons -->
-                                <div class="flex flex-col sm:flex-row gap-3">
-                                    <button
-                                        type="button"
-                                        @click="handleAccept(mission.id)"
-                                        :disabled="processingMission === mission.id"
-                                        class="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-emerald-600 text-white rounded-lg font-bold hover:bg-emerald-700 shadow-md hover:shadow-lg transition-all disabled:opacity-50"
-                                    >
-                                        <Icon v-if="processingMission === mission.id" name="heroicons:arrow-path" class="w-5 h-5 animate-spin" />
-                                        <Icon v-else name="heroicons:check-circle" class="w-5 h-5" />
-                                        Accepter la mission
-                                    </button>
-                                    <button
-                                        type="button"
-                                        @click="handleRefuse(mission.id)"
-                                        :disabled="processingMission === mission.id"
-                                        class="flex-1 inline-flex items-center justify-center gap-2 px-6 py-3.5 bg-white border-2 border-slate-300 text-slate-700 rounded-lg font-bold hover:bg-slate-50 hover:border-slate-400 transition-all disabled:opacity-50"
-                                    >
-                                        <Icon v-if="processingMission === mission.id" name="heroicons:arrow-path" class="w-5 h-5 animate-spin" />
-                                        <Icon v-else name="heroicons:x-circle" class="w-5 h-5" />
-                                        Refuser
-                                    </button>
-                                </div>
-                                
-                                <!-- Consequences info -->
-                                <div class="mt-4 flex items-start gap-2 text-sm text-slate-600 bg-white/50 rounded-lg p-3">
-                                    <Icon name="heroicons:information-circle" class="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                                    <p>
-                                        <span class="font-semibold">En acceptant,</span> vous vous engagez à réaliser cette mission BIM. 
-                                        <span class="font-semibold">En refusant,</span> l'entreprise sera notifiée et pourra proposer la mission à un autre expert.
-                                    </p>
-                                </div>
+                            </div>
+                            
+                            <!-- Action buttons (small, inline) -->
+                            <div class="flex items-center gap-2 flex-shrink-0">
+                                <button
+                                    type="button"
+                                    @click="handleAccept(mission.id)"
+                                    :disabled="processingMission === mission.id"
+                                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                >
+                                    <Icon v-if="processingMission === mission.id" name="heroicons:arrow-path" class="w-4 h-4 animate-spin" />
+                                    <Icon v-else name="heroicons:check" class="w-4 h-4" />
+                                    Accepter
+                                </button>
+                                <button
+                                    type="button"
+                                    @click="handleRefuse(mission.id)"
+                                    :disabled="processingMission === mission.id"
+                                    class="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-300 text-slate-600 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-colors disabled:opacity-50"
+                                >
+                                    <Icon v-if="processingMission === mission.id" name="heroicons:arrow-path" class="w-4 h-4 animate-spin" />
+                                    <Icon v-else name="heroicons:x-mark" class="w-4 h-4" />
+                                    Refuser
+                                </button>
                             </div>
                         </div>
                     </div>
                 </template>
                 
-                <!-- In Progress missions -->
+                <!-- In Progress missions (compact) -->
                 <template v-else-if="activeTab === 'in_progress'">
                     <div
                         v-for="mission in currentMissions"
                         :key="mission.id"
-                        class="bg-white rounded-xl border-2 border-emerald-200 p-6 hover:shadow-lg transition-all"
+                        class="px-4 sm:px-6 py-4 hover:bg-emerald-50/30 transition-colors"
                     >
-                        <div class="flex items-start gap-4">
-                            <div class="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                                <Icon name="heroicons:check-circle" class="w-6 h-6 text-emerald-600" />
-                            </div>
-                            <div class="flex-1">
-                                <div class="flex items-center gap-2 mb-2">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex flex-wrap items-center gap-2 mb-1.5">
                                     <span :class="[getStatusConfig(mission.status)?.bg, getStatusConfig(mission.status)?.text]" 
-                                          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium">
-                                        <Icon :name="getStatusConfig(mission.status)?.icon || 'heroicons:question-mark-circle'" class="w-3.5 h-3.5" />
+                                          class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                                         {{ getStatusConfig(mission.status)?.label || mission.status }}
                                     </span>
-                                    <span class="text-sm text-slate-600">
-                                        <Icon name="heroicons:calendar" class="w-4 h-4 inline mr-1" />
-                                        Acceptée le {{ formatDate(mission.createdAt) }}
-                                    </span>
+                                    <span class="text-xs text-slate-500">Acceptée le {{ formatDate(mission.createdAt) }}</span>
                                 </div>
-                                <h3 class="text-xl font-bold text-slate-900 mb-2">{{ mission.title }}</h3>
-                                <p class="text-slate-600 leading-relaxed mb-2">{{ mission.description }}</p>
-                                <div class="flex items-center gap-2 text-sm text-slate-500">
-                                    <Icon name="heroicons:building-office" class="w-4 h-4" />
-                                    <span>{{ (mission as any).enterpriseName || 'Entreprise inconnue' }}</span>
+                                <h3 class="text-base font-bold text-slate-900 truncate">{{ mission.title }}</h3>
+                                <p class="text-sm text-slate-600 line-clamp-1 mt-0.5 mb-2">{{ mission.description }}</p>
+                                
+                                <div class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
+                                    <Icon name="heroicons:building-office-2" class="w-4 h-4 text-emerald-600" />
+                                    {{ (mission as any).enterpriseName || 'Entreprise inconnue' }}
                                 </div>
                             </div>
                         </div>
                     </div>
                 </template>
                 
-                <!-- History -->
+                <!-- History (compact) -->
                 <template v-else>
                     <div
                         v-for="mission in currentMissions"
                         :key="mission.id"
-                        class="bg-white rounded-xl border border-slate-200 p-6 hover:shadow-md transition-all"
+                        class="px-4 sm:px-6 py-4 hover:bg-slate-50 transition-colors"
                     >
-                        <div class="flex items-start gap-4">
-                            <div :class="mission.status === 'completed' ? 'bg-blue-100' : 'bg-slate-100'" 
-                                 class="w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <Icon :name="getStatusConfig(mission.status)?.icon || 'heroicons:question-mark-circle'" 
-                                      :class="mission.status === 'completed' ? 'text-blue-600' : 'text-slate-500'"
-                                      class="w-6 h-6" />
-                            </div>
-                            <div class="flex-1">
-                                <div class="flex items-center gap-2 mb-2">
+                        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div class="flex-1 min-w-0">
+                                <div class="flex flex-wrap items-center gap-2 mb-1.5">
                                     <span :class="[getStatusConfig(mission.status)?.bg, getStatusConfig(mission.status)?.text]" 
-                                          class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium">
-                                        <Icon :name="getStatusConfig(mission.status)?.icon || 'heroicons:question-mark-circle'" class="w-3.5 h-3.5" />
+                                          class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                                         {{ getStatusConfig(mission.status)?.label || mission.status }}
                                     </span>
-                                    <span class="text-sm text-slate-600">
-                                        <Icon name="heroicons:calendar" class="w-4 h-4 inline mr-1" />
-                                        {{ formatDate(mission.createdAt) }}
-                                    </span>
+                                    <span class="text-xs text-slate-500">{{ formatDate(mission.createdAt) }}</span>
                                 </div>
-                                <h3 class="text-xl font-bold text-slate-900 mb-2">{{ mission.title }}</h3>
-                                <p class="text-slate-600 leading-relaxed mb-2">{{ mission.description }}</p>
-                                <div class="flex items-center gap-2 text-sm text-slate-500">
-                                    <Icon name="heroicons:building-office" class="w-4 h-4" />
-                                    <span>{{ (mission as any).enterpriseName || 'Entreprise inconnue' }}</span>
+                                <h3 class="text-base font-bold text-slate-900 truncate">{{ mission.title }}</h3>
+                                <p class="text-sm text-slate-600 line-clamp-1 mt-0.5 mb-2">{{ mission.description }}</p>
+                                
+                                <div class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-700 bg-slate-50 px-2 py-1 rounded-md border border-slate-200">
+                                    <Icon name="heroicons:building-office-2" class="w-4 h-4 text-slate-500" />
+                                    {{ (mission as any).enterpriseName || 'Entreprise inconnue' }}
                                 </div>
                             </div>
                         </div>

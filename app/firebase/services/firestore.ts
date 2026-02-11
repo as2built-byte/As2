@@ -20,7 +20,8 @@ import {
     getDocs,
     addDoc,
     type Firestore,
-    type DocumentData
+    type DocumentData,
+    type QueryConstraint
 } from 'firebase/firestore'
 import { getFirebaseApp } from '../index'
 import type {
@@ -890,10 +891,21 @@ export async function createMission(
 /**
  * Get all missions for a project
  */
-export async function getMissionsByProject(projectId: string): Promise<Mission[]> {
+export async function getMissionsByProject(projectId: string, filters?: { enterpriseId?: string, expertId?: string }): Promise<Mission[]> {
     const db = getFirebaseFirestore()
     const missionsRef = collection(db, COLLECTIONS.MISSIONS)
-    const q = query(missionsRef, where('projectId', '==', projectId))
+
+    const constraints: QueryConstraint[] = [where('projectId', '==', projectId)]
+
+    if (filters?.enterpriseId) {
+        constraints.push(where('enterpriseId', '==', filters.enterpriseId))
+    }
+
+    if (filters?.expertId) {
+        constraints.push(where('expertId', '==', filters.expertId))
+    }
+
+    const q = query(missionsRef, ...constraints)
     const querySnapshot = await getDocs(q)
 
     return querySnapshot.docs.map(docSnap => {
@@ -910,6 +922,15 @@ export async function getMissionsByProject(projectId: string): Promise<Mission[]
             updatedAt: data.updatedAt?.toDate() || new Date(),
         } as Mission
     })
+}
+
+/**
+ * Delete a mission
+ */
+export async function deleteMission(missionId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const missionRef = doc(db, COLLECTIONS.MISSIONS, missionId)
+    await deleteDoc(missionRef)
 }
 
 /**
@@ -970,6 +991,30 @@ export async function getPendingMissionsForAdmin(): Promise<Mission[]> {
     const missionsRef = collection(db, COLLECTIONS.MISSIONS)
     const q = query(missionsRef, where('status', '==', 'pending_admin'))
     const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            enterpriseId: data.enterpriseId,
+            title: data.title,
+            description: data.description,
+            status: data.status,
+            expertId: data.expertId || null,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Mission
+    })
+}
+
+/**
+ * Get ALL missions for admin dashboard (all statuses)
+ */
+export async function getAllMissionsForAdmin(): Promise<Mission[]> {
+    const db = getFirebaseFirestore()
+    const missionsRef = collection(db, COLLECTIONS.MISSIONS)
+    const querySnapshot = await getDocs(missionsRef)
 
     return querySnapshot.docs.map(docSnap => {
         const data = docSnap.data()
@@ -1071,8 +1116,8 @@ export async function refuseMission(missionId: string): Promise<void> {
 }
 
 /**
- * Get all available experts (active status, available)
- * For admin to select when assigning missions
+ * Get all active experts for admin to assign to missions
+ * Experts can be assigned to multiple missions simultaneously
  */
 export async function getAvailableExperts(): Promise<UserWithDetails[]> {
     const db = getFirebaseFirestore()
@@ -1090,20 +1135,17 @@ export async function getAvailableExperts(): Promise<UserWithDetails[]> {
         const userData = docSnap.data()
         const expertProfile = await getExpertProfile(docSnap.id)
 
-        // Only include available experts
-        if (expertProfile?.availability) {
-            experts.push({
-                uid: docSnap.id,
-                email: userData.email,
-                firstName: userData.firstName,
-                lastName: userData.lastName,
-                phone: userData.phone,
-                role: userData.role,
-                status: userData.status,
-                createdAt: userData.createdAt?.toDate() || new Date(),
-                expertProfile
-            } as UserWithDetails)
-        }
+        experts.push({
+            uid: docSnap.id,
+            email: userData.email,
+            firstName: userData.firstName,
+            lastName: userData.lastName,
+            phone: userData.phone,
+            role: userData.role,
+            status: userData.status,
+            createdAt: userData.createdAt?.toDate() || new Date(),
+            expertProfile
+        } as UserWithDetails)
     }
 
     return experts
@@ -1122,6 +1164,24 @@ export async function completeMission(
     await updateDoc(missionRef, {
         status: 'completed',
         completedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
+}
+
+/**
+ * Cancel expert from a mission
+ * Clears expertId and returns mission to pending_admin
+ */
+export async function cancelExpertFromMission(
+    missionId: string,
+    expertId: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+
+    const missionRef = doc(db, COLLECTIONS.MISSIONS, missionId)
+    await updateDoc(missionRef, {
+        expertId: null,
+        status: 'pending_admin',
         updatedAt: serverTimestamp(),
     })
 }
