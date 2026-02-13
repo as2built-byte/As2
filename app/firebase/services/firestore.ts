@@ -16,7 +16,6 @@ import {
     collection,
     query,
     where,
-    orderBy,
     getDocs,
     addDoc,
     type Firestore,
@@ -40,12 +39,26 @@ import type {
     CreatePackData,
     UpdatePackData,
     Project,
+    ProjectStatus,
     CreateProjectData,
     UpdateProjectData,
     Mission,
     CreateMissionData,
     UpdateMissionData,
-    MissionStatus
+    MissionStatus,
+    ProjectDocument,
+    CreateDocumentData,
+    DocumentType,
+    ProjectPhoto,
+    CreatePhotoData,
+    ProjectProblem,
+    CreateProblemData,
+    ProblemSeverity,
+    ProjectRFI,
+    CreateRFIData,
+    ProjectSubmission,
+    CreateSubmissionData,
+    SubmissionStatus
 } from '~/types'
 
 let firestoreInstance: Firestore | null = null
@@ -75,6 +88,11 @@ export const COLLECTIONS = {
     PACKS: 'packs',
     PROJECTS: 'projects',
     MISSIONS: 'missions',
+    DOCUMENTS: 'documents',
+    PHOTOS: 'photos',
+    PROBLEMS: 'problems',
+    RFIS: 'rfis',
+    SUBMISSIONS: 'submissions',
 } as const
 
 // ========================================
@@ -682,7 +700,7 @@ export async function createProject(
         description: data.description,
         address: data.address,
         startDate: data.startDate,
-        status: 'draft',
+        status: 'active',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
     })
@@ -697,6 +715,14 @@ export async function createProject(
     }
 
     return docRef.id
+}
+
+/**
+ * Normalize legacy project status values to valid 'active' | 'completed'
+ */
+function normalizeProjectStatus(status: string): ProjectStatus {
+    if (status === 'completed') return 'completed'
+    return 'active'
 }
 
 /**
@@ -725,7 +751,7 @@ export async function getProjectsByEnterprise(enterpriseId: string): Promise<Pro
                 description: data.description,
                 address: data.address,
                 startDate: data.startDate?.toDate() || new Date(),
-                status: data.status,
+                status: normalizeProjectStatus(data.status),
                 createdAt: data.createdAt?.toDate() || new Date(),
                 updatedAt: data.updatedAt?.toDate() || new Date(),
             } as Project
@@ -756,7 +782,7 @@ export async function getProject(projectId: string): Promise<Project | null> {
         description: data.description,
         address: data.address,
         startDate: data.startDate?.toDate() || new Date(),
-        status: data.status,
+        status: normalizeProjectStatus(data.status),
         createdAt: data.createdAt?.toDate() || new Date(),
         updatedAt: data.updatedAt?.toDate() || new Date(),
     } as Project
@@ -1184,4 +1210,482 @@ export async function cancelExpertFromMission(
         status: 'pending_admin',
         updatedAt: serverTimestamp(),
     })
+}
+
+// ========================================
+// Admin Dashboard Queries
+// ========================================
+
+/**
+ * Get ALL projects across all enterprises (admin only)
+ */
+export async function getAllProjects(): Promise<Project[]> {
+    const db = getFirebaseFirestore()
+    const projectsRef = collection(db, COLLECTIONS.PROJECTS)
+    const querySnapshot = await getDocs(projectsRef)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            enterpriseId: data.enterpriseId,
+            title: data.title,
+            description: data.description,
+            address: data.address,
+            startDate: data.startDate?.toDate() || new Date(),
+            status: normalizeProjectStatus(data.status),
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Project
+    })
+}
+
+/**
+ * Get projects where an expert has accepted missions
+ * Fetches expert's missions, extracts unique projectIds, then loads each project
+ */
+export async function getProjectsByExpert(expertId: string): Promise<Project[]> {
+    const missions = await getMissionsByExpert(expertId)
+    const acceptedMissions = missions.filter(m => m.status === 'accepted' || m.status === 'completed')
+    const uniqueProjectIds = [...new Set(acceptedMissions.map(m => m.projectId))]
+
+    if (uniqueProjectIds.length === 0) return []
+
+    const projects: Project[] = []
+    for (const projectId of uniqueProjectIds) {
+        const project = await getProject(projectId)
+        if (project) projects.push(project)
+    }
+
+    return projects
+}
+
+/** Payment record from 'payments' collection */
+export interface PaymentRecord {
+    id: string
+    userId: string
+    itemType: 'formation' | 'pack' | 'audit'
+    itemId: string
+    createdAt: Date
+}
+
+/**
+ * Get payments for a specific user
+ */
+export async function getPaymentsByUser(userId: string): Promise<PaymentRecord[]> {
+    const db = getFirebaseFirestore()
+    const paymentsRef = collection(db, 'payments')
+    const q = query(paymentsRef, where('userId', '==', userId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            userId: data.userId,
+            itemType: data.itemType,
+            itemId: data.itemId,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as PaymentRecord
+    })
+}
+
+/**
+ * Get ALL payments (admin only)
+ */
+export async function getAllPayments(): Promise<PaymentRecord[]> {
+    const db = getFirebaseFirestore()
+    const paymentsRef = collection(db, 'payments')
+    const querySnapshot = await getDocs(paymentsRef)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            userId: data.userId,
+            itemType: data.itemType,
+            itemId: data.itemId,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as PaymentRecord
+    })
+}
+
+// ========================================
+// Project Documents CRUD
+// ========================================
+
+/**
+ * Get all documents for a project
+ */
+export async function getDocumentsByProject(projectId: string): Promise<ProjectDocument[]> {
+    const db = getFirebaseFirestore()
+    const docsRef = collection(db, COLLECTIONS.DOCUMENTS)
+    const q = query(docsRef, where('projectId', '==', projectId))
+    const querySnapshot = await getDocs(q)
+
+    const docs = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            title: data.title,
+            fileUrl: data.fileUrl,
+            type: data.type,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectDocument
+    })
+
+    // Sort client-side (newest first) to avoid composite index requirement
+    return docs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Create a new project document record in Firestore
+ */
+export async function createDocument(
+    projectId: string,
+    senderId: string,
+    data: CreateDocumentData,
+    fileUrl: string
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const docsRef = collection(db, COLLECTIONS.DOCUMENTS)
+
+    const docRef = await addDoc(docsRef, {
+        projectId,
+        senderId,
+        title: data.title,
+        fileUrl,
+        type: data.type,
+        createdAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Update a project document (title, type, fileUrl)
+ */
+export async function updateDocument(
+    documentId: string,
+    data: { title?: string; type?: DocumentType; fileUrl?: string }
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    await updateDoc(docRef, { ...data })
+}
+
+/**
+ * Delete a project document record from Firestore
+ */
+export async function deleteDocument(documentId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    await deleteDoc(docRef)
+}
+
+// ========================================
+// Project Photos CRUD
+// ========================================
+
+/**
+ * Get all photos for a project
+ */
+export async function getPhotosByProject(projectId: string): Promise<ProjectPhoto[]> {
+    const db = getFirebaseFirestore()
+    const photosRef = collection(db, COLLECTIONS.PHOTOS)
+    const q = query(photosRef, where('projectId', '==', projectId))
+    const querySnapshot = await getDocs(q)
+
+    const photos = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            imageUrl: data.imageUrl,
+            note: data.note || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectPhoto
+    })
+
+    // Sort client-side (newest first) to avoid composite index requirement
+    return photos.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Create a new project photo record in Firestore
+ */
+export async function createPhoto(
+    projectId: string,
+    senderId: string,
+    data: CreatePhotoData,
+    imageUrl: string
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const photosRef = collection(db, COLLECTIONS.PHOTOS)
+
+    const docRef = await addDoc(photosRef, {
+        projectId,
+        senderId,
+        imageUrl,
+        note: data.note,
+        createdAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Update a project photo (note, imageUrl)
+ */
+export async function updatePhoto(
+    photoId: string,
+    data: { note?: string; imageUrl?: string }
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const photoRef = doc(db, COLLECTIONS.PHOTOS, photoId)
+    await updateDoc(photoRef, { ...data })
+}
+
+/**
+ * Delete a project photo record from Firestore
+ */
+export async function deletePhoto(photoId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const photoRef = doc(db, COLLECTIONS.PHOTOS, photoId)
+    await deleteDoc(photoRef)
+}
+
+// ========================================
+// Project Problems CRUD
+// ========================================
+
+/**
+ * Get all problems for a project
+ */
+export async function getProblemsByProject(projectId: string): Promise<ProjectProblem[]> {
+    const db = getFirebaseFirestore()
+    const problemsRef = collection(db, COLLECTIONS.PROBLEMS)
+    const q = query(problemsRef, where('projectId', '==', projectId))
+    const querySnapshot = await getDocs(q)
+
+    const problems = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            title: data.title,
+            description: data.description || '',
+            severity: data.severity,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectProblem
+    })
+
+    // Sort client-side (newest first)
+    return problems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Create a new project problem record in Firestore
+ */
+export async function createProblem(
+    projectId: string,
+    senderId: string,
+    data: CreateProblemData
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const problemsRef = collection(db, COLLECTIONS.PROBLEMS)
+
+    const docRef = await addDoc(problemsRef, {
+        projectId,
+        senderId,
+        title: data.title,
+        description: data.description,
+        severity: data.severity,
+        createdAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Update a project problem (title, description, severity)
+ */
+export async function updateProblem(
+    problemId: string,
+    data: { title?: string; description?: string; severity?: ProblemSeverity }
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const problemRef = doc(db, COLLECTIONS.PROBLEMS, problemId)
+    await updateDoc(problemRef, { ...data })
+}
+
+/**
+ * Delete a project problem record from Firestore
+ */
+export async function deleteProblem(problemId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const problemRef = doc(db, COLLECTIONS.PROBLEMS, problemId)
+    await deleteDoc(problemRef)
+}
+
+// ========================================
+// Project RFIs CRUD
+// ========================================
+
+/**
+ * Get all RFIs for a project
+ */
+export async function getRFIsByProject(projectId: string): Promise<ProjectRFI[]> {
+    const db = getFirebaseFirestore()
+    const rfisRef = collection(db, COLLECTIONS.RFIS)
+    const q = query(rfisRef, where('projectId', '==', projectId))
+    const querySnapshot = await getDocs(q)
+
+    const rfis = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            title: data.title,
+            question: data.question || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectRFI
+    })
+
+    // Sort client-side (newest first)
+    return rfis.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Create a new RFI record in Firestore
+ */
+export async function createRFI(
+    projectId: string,
+    senderId: string,
+    data: CreateRFIData
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const rfisRef = collection(db, COLLECTIONS.RFIS)
+
+    const docRef = await addDoc(rfisRef, {
+        projectId,
+        senderId,
+        title: data.title,
+        question: data.question,
+        createdAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Update an RFI (title, question)
+ */
+export async function updateRFI(
+    rfiId: string,
+    data: { title?: string; question?: string }
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const rfiRef = doc(db, COLLECTIONS.RFIS, rfiId)
+    await updateDoc(rfiRef, { ...data })
+}
+
+/**
+ * Delete an RFI record from Firestore
+ */
+export async function deleteRFI(rfiId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const rfiRef = doc(db, COLLECTIONS.RFIS, rfiId)
+    await deleteDoc(rfiRef)
+}
+
+// ========================================
+// Project Submissions CRUD
+// ========================================
+
+/**
+ * Get all submissions for a project
+ */
+export async function getSubmissionsByProject(projectId: string): Promise<ProjectSubmission[]> {
+    const db = getFirebaseFirestore()
+    const submissionsRef = collection(db, COLLECTIONS.SUBMISSIONS)
+    const q = query(submissionsRef, where('projectId', '==', projectId))
+    const querySnapshot = await getDocs(q)
+
+    const submissions = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            title: data.title,
+            description: data.description || '',
+            status: data.status,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectSubmission
+    })
+
+    // Sort client-side (newest first)
+    return submissions.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Create a new submission record in Firestore
+ */
+export async function createSubmission(
+    projectId: string,
+    senderId: string,
+    data: CreateSubmissionData
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const submissionsRef = collection(db, COLLECTIONS.SUBMISSIONS)
+
+    const docRef = await addDoc(submissionsRef, {
+        projectId,
+        senderId,
+        title: data.title,
+        description: data.description,
+        status: 'pending' as SubmissionStatus,
+        createdAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Update a submission (title, description) - only by creator
+ */
+export async function updateSubmission(
+    submissionId: string,
+    data: { title?: string; description?: string }
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const submissionRef = doc(db, COLLECTIONS.SUBMISSIONS, submissionId)
+    await updateDoc(submissionRef, { ...data })
+}
+
+/**
+ * Update submission status - only by enterprise owner of the project
+ */
+export async function updateSubmissionStatus(
+    submissionId: string,
+    status: SubmissionStatus
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const submissionRef = doc(db, COLLECTIONS.SUBMISSIONS, submissionId)
+    await updateDoc(submissionRef, { status })
+}
+
+/**
+ * Delete a submission record from Firestore
+ */
+export async function deleteSubmission(submissionId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const submissionRef = doc(db, COLLECTIONS.SUBMISSIONS, submissionId)
+    await deleteDoc(submissionRef)
 }

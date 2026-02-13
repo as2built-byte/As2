@@ -40,9 +40,9 @@ export const useProjectsStore = defineStore('projects', {
             return state.projects.filter(p => p.status === status)
         },
 
-        /** Active projects (not archived) */
+        /** Active projects (not completed) */
         activeProjects: (state) => {
-            return state.projects.filter(p => p.status !== 'archived')
+            return state.projects.filter(p => p.status === 'active')
         },
 
         /** Has subscription */

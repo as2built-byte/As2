@@ -39,6 +39,8 @@ export function getFirebaseStorage(): FirebaseStorage {
 export const STORAGE_PATHS = {
     EXPERT_CVS: 'experts/cv',
     FORMATION_COVERS: 'formations/covers',
+    PROJECT_DOCUMENTS: 'projects/documents',
+    PROJECT_PHOTOS: 'projects/photos',
 } as const
 
 // ========================================
@@ -225,5 +227,112 @@ export async function deleteFormationCoverByUrl(coverUrl: string): Promise<void>
     } catch (error) {
         // Log but don't throw - cover might already be deleted or URL invalid
         console.warn('Could not delete formation cover:', error)
+    }
+}
+
+// ========================================
+// Project Document Upload (PDF, max 10MB)
+// ========================================
+
+/**
+ * Upload a project document (PDF only, max 10MB)
+ * @param projectId Project ID
+ * @param senderId User ID of the uploader
+ * @param file PDF file to upload
+ * @returns Download URL of the uploaded file
+ */
+export async function uploadProjectDocument(
+    projectId: string,
+    senderId: string,
+    file: File
+): Promise<string> {
+    const storage = getFirebaseStorage()
+
+    const timestamp = Date.now()
+    const filename = `doc_${timestamp}.pdf`
+    const filePath = `${STORAGE_PATHS.PROJECT_DOCUMENTS}/${projectId}/${senderId}/${filename}`
+
+    const storageRef = ref(storage, filePath)
+
+    const metadata: UploadMetadata = {
+        contentType: 'application/pdf',
+        customMetadata: {
+            projectId,
+            uploadedBy: senderId,
+            uploadedAt: new Date().toISOString(),
+        }
+    }
+
+    await uploadBytes(storageRef, file, metadata)
+    return getDownloadURL(storageRef)
+}
+
+/**
+ * Delete a project document file from Storage by URL
+ */
+export async function deleteProjectDocumentByUrl(fileUrl: string): Promise<void> {
+    if (!fileUrl) return
+
+    const storage = getFirebaseStorage()
+
+    try {
+        const urlPath = decodeURIComponent(fileUrl.split('/o/')[1]?.split('?')[0] || '')
+        if (urlPath) {
+            const fileRef = ref(storage, urlPath)
+            await deleteObject(fileRef)
+        }
+    } catch (error) {
+        console.warn('Could not delete project document:', error)
+    }
+}
+
+// ========================================
+// Project Photo Functions
+// ========================================
+
+/**
+ * Upload a project photo (image only, max 10MB)
+ * Path: projects/photos/{projectId}/{senderId}/{timestamp}_{filename}
+ */
+export async function uploadProjectPhoto(
+    projectId: string,
+    senderId: string,
+    file: File
+): Promise<string> {
+    const storage = getFirebaseStorage()
+    const timestamp = Date.now()
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+    const filePath = `${STORAGE_PATHS.PROJECT_PHOTOS}/${projectId}/${senderId}/${timestamp}_${safeName}`
+    const fileRef = ref(storage, filePath)
+
+    const metadata: UploadMetadata = {
+        contentType: file.type,
+        customMetadata: {
+            uploadedBy: senderId,
+            projectId: projectId,
+            originalName: file.name,
+        },
+    }
+
+    const snapshot = await uploadBytes(fileRef, file, metadata)
+    return await getDownloadURL(snapshot.ref)
+}
+
+/**
+ * Delete a project photo file from Storage by URL
+ */
+export async function deleteProjectPhotoByUrl(imageUrl: string): Promise<void> {
+    if (!imageUrl) return
+
+    const storage = getFirebaseStorage()
+
+    try {
+        const urlPath = decodeURIComponent(imageUrl.split('/o/')[1]?.split('?')[0] || '')
+        if (urlPath) {
+            const fileRef = ref(storage, urlPath)
+            await deleteObject(fileRef)
+        }
+    } catch (error) {
+        console.warn('Could not delete project photo:', error)
     }
 }

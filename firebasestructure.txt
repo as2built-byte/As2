@@ -30,7 +30,7 @@ projects
       - description: string
       - address: string
       - startDate: Timestamp
-      - status: "active" | "completed" | "archived"
+      - status: "active" | "completed" 
       - createdAt: Timestamp
       - updatedAt: Timestamp
 
@@ -77,9 +77,52 @@ payments
       - itemId
       - createdAt
 
+documents
+  └── {documentId}
+      - projectId: string // reference au projet
+      - senderId: string // uid de celui qui a déposé le document
+      - title: string
+      - fileUrl: string // URL du fichier PDF dans Storage
+      - type: "plan" | "report" | "contract"
+      - createdAt: Timestamp
+
+photos
+  └── {photoId}
+      - projectId: string // reference au projet
+      - senderId: string // uid de celui qui a déposé la photo
+      - imageUrl: string // URL de l'image dans Storage
+      - note: string // description ou note sur la photo
+      - createdAt: Timestamp
+
+problems
+  └── {problemId}
+      - projectId: string // reference au projet
+      - senderId: string // uid de celui qui a signalé le problème
+      - title: string
+      - description: string
+      - severity: "low" | "medium" | "high"
+      - createdAt: Timestamp
+
+rfis
+  └── {rfiId}
+      - projectId: string // reference au projet
+      - senderId: string // uid de celui qui a envoyé la demande
+      - title: string
+      - question: string
+      - createdAt: Timestamp
+
+submissions
+  └── {submissionId}
+      - projectId: string // reference au projet
+      - senderId: string // uid de celui qui a soumis
+      - title: string
+      - description: string
+      - status: "pending" | "approved" | "rejected"
+      - createdAt: Timestamp
+
 notifications
   └── {notificationId}
-      - type: "new_payment" | "new_registration" | "certification_request" | "subscription_request" | "new_mission"
+      - type: "new_payment" | "new_registration" | "certification_request" | "subscription_request" | "new_mission" | "mission_invitation" | "mission_accepted"
       - title: string
       - message: string
       - data: {
@@ -91,7 +134,8 @@ notifications
           itemTitle: string
           amount: number // optionnel, pour les paiements
         }
-      - targetRole: "admin"
+      - targetRole: "admin" | "expert" | "enterprise"
+      - targetUserId: string // optionnel, pour les notifications ciblées (expert/enterprise)
       - read: boolean // false par défaut
       - createdAt // Timestamp Firebase
 

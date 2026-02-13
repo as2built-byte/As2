@@ -1,15 +1,18 @@
 /**
  * Notifications Store
  * 
- * Pinia store for admin notifications with real-time updates
+ * Pinia store for notifications with real-time updates
+ * Supports admin, expert, and enterprise notifications
  */
 
 import { defineStore } from 'pinia'
 import type { Notification } from '~/types/notification'
 import {
     subscribeToNotifications,
+    subscribeToUserNotifications,
     markNotificationAsRead,
-    markAllNotificationsAsRead
+    markAllNotificationsAsRead,
+    markAllUserNotificationsAsRead
 } from '~/services/notificationsClient'
 import type { Unsubscribe } from 'firebase/firestore'
 
@@ -18,7 +21,8 @@ export const useNotificationsStore = defineStore('notifications', {
         notifications: [] as Notification[],
         loading: true,
         error: null as string | null,
-        _unsubscribe: null as Unsubscribe | null
+        _unsubscribe: null as Unsubscribe | null,
+        _subscribedUserId: null as string | null
     }),
 
     getters: {
@@ -40,14 +44,11 @@ export const useNotificationsStore = defineStore('notifications', {
 
     actions: {
         /**
-         * Subscribe to real-time notifications
+         * Subscribe to real-time admin notifications
          * Should be called when admin layout mounts
          */
         subscribe() {
-            // Avoid duplicate subscriptions
-            if (this._unsubscribe) {
-                return
-            }
+            if (this._unsubscribe) return
 
             this.loading = true
             this.error = null
@@ -72,13 +73,48 @@ export const useNotificationsStore = defineStore('notifications', {
         },
 
         /**
+         * Subscribe to real-time user-specific notifications (expert/enterprise)
+         * Should be called when expert or enterprise layout mounts
+         */
+        subscribeAsUser(userId: string) {
+            // Avoid duplicate subscriptions for same user
+            if (this._unsubscribe && this._subscribedUserId === userId) return
+
+            // Cleanup previous subscription if any
+            this.unsubscribe()
+
+            this.loading = true
+            this.error = null
+            this._subscribedUserId = userId
+
+            try {
+                this._unsubscribe = subscribeToUserNotifications(
+                    userId,
+                    (notifications) => {
+                        this.notifications = notifications
+                        this.loading = false
+                    },
+                    (error) => {
+                        console.error('Failed to subscribe to user notifications:', error)
+                        this.error = 'Erreur de connexion aux notifications'
+                        this.loading = false
+                    }
+                )
+            } catch (err) {
+                console.error('Failed to subscribe to user notifications:', err)
+                this.error = 'Erreur de connexion aux notifications'
+                this.loading = false
+            }
+        },
+
+        /**
          * Unsubscribe from real-time updates
-         * Should be called when admin layout unmounts
          */
         unsubscribe() {
             if (this._unsubscribe) {
                 this._unsubscribe()
                 this._unsubscribe = null
+                this._subscribedUserId = null
             }
         },
 
@@ -88,7 +124,6 @@ export const useNotificationsStore = defineStore('notifications', {
         async markAsRead(notificationId: string) {
             try {
                 await markNotificationAsRead(notificationId)
-                // Optimistic update (real-time listener will confirm)
                 const notification = this.notifications.find(n => n.id === notificationId)
                 if (notification) {
                     notification.read = true
@@ -103,8 +138,11 @@ export const useNotificationsStore = defineStore('notifications', {
          */
         async markAllAsRead() {
             try {
-                await markAllNotificationsAsRead()
-                // Optimistic update
+                if (this._subscribedUserId) {
+                    await markAllUserNotificationsAsRead(this._subscribedUserId)
+                } else {
+                    await markAllNotificationsAsRead()
+                }
                 this.notifications.forEach(n => {
                     n.read = true
                 })

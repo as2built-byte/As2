@@ -19,6 +19,26 @@ service firebase.storage {
       allow read: if isAuthenticated();
     }
     
+    // Project documents - PDF only, max 10MB
+    match /projects/documents/{projectId}/{senderId}/{filename} {
+      allow write: if isOwner(senderId)
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('application/(x-)?pdf');
+      // Delete: any authenticated (enterprise owner check done in app + Firestore rules)
+      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+    }
+    
+    // Project photos - images only, max 10MB
+    match /projects/photos/{projectId}/{senderId}/{filename} {
+      allow write: if isOwner(senderId)
+                   && request.resource.size < 10 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+      // Delete: any authenticated (enterprise owner check done in app + Firestore rules)
+      allow delete: if isAuthenticated();
+      allow read: if isAuthenticated();
+    }
+    
     // Formation cover images - admin only
     match /formations/covers/{formationId}/{filename} {
       // Check if user is admin (requires Firestore lookup)

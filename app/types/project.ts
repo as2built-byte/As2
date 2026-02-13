@@ -9,7 +9,7 @@
 // ========================================
 
 /** Project status values */
-export type ProjectStatus = 'draft' | 'active' | 'completed' | 'archived'
+export type ProjectStatus = 'active' | 'completed'
 
 /** Project stored in 'projects' collection */
 export interface Project {

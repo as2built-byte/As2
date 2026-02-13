@@ -44,19 +44,7 @@ function getStatusConfig(status: string | undefined | null): ProjectStatusConfig
             icon: 'heroicons:check-circle', 
             label: 'Terminé' 
         },
-        archived: { 
-            bg: 'bg-gray-100', 
-            text: 'text-gray-500', 
-            icon: 'heroicons:archive-box', 
-            label: 'Archivé' 
-        },
-        // Legacy fallback
-        draft: { 
-            bg: 'bg-slate-100', 
-            text: 'text-slate-700', 
-            icon: 'heroicons:document-text',
-            label: 'En cours' 
-        }
+    
     }
     return configs[status || 'active'] ?? defaultConfig
 }
@@ -143,7 +131,7 @@ function formatDate(date: Date): string {
                 <div v-else class="text-right">
                     <div class="inline-flex items-center gap-2 px-5 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg font-medium">
                         <Icon name="heroicons:check-circle" class="w-5 h-5" />
-                        Demande envoyée (en attente)
+                        Demande d'abonnement envoyée (en attente)
                     </div>
                 </div>
             </div>
@@ -261,13 +249,12 @@ function formatDate(date: Date): string {
                 class="group bg-white rounded-xl border-2 border-slate-200 p-6 hover:shadow-xl hover:border-blue-400 hover:-translate-y-1 transition-all duration-200"
             >
                 <!-- Header with status -->
-                <div class="flex items-start justify-between mb-4">
+                <div class="mb-4">
                     <div :class="[getStatusConfig(project.status).bg, getStatusConfig(project.status).text]" 
                          class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium">
                         <Icon :name="getStatusConfig(project.status).icon" class="w-4 h-4" />
                         {{ getStatusConfig(project.status).label }}
                     </div>
-                    <Icon name="heroicons:arrow-right" class="w-5 h-5 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-1 transition-all" />
                 </div>
                 
                 <!-- Project title and description -->
@@ -292,12 +279,9 @@ function formatDate(date: Date): string {
                 
                 <!-- Mission count -->
                 <div class="pt-4 border-t border-slate-100">
-                    <div class="flex items-center justify-between text-sm">
-                        <div class="flex items-center gap-2 text-slate-600">
-                            <Icon name="heroicons:briefcase" class="w-4 h-4 text-purple-500" />
-                            <span class="font-medium">{{ getMissionCount(project.id) }} missions</span>
-                        </div>
-                        <span class="text-blue-600 font-medium group-hover:underline">Voir détails →</span>
+                    <div class="flex items-center gap-2 text-sm text-slate-600">
+                        <Icon name="heroicons:briefcase" class="w-4 h-4 text-purple-500" />
+                        <span class="font-medium">{{ getMissionCount(project.id) }} missions</span>
                     </div>
                 </div>
             </NuxtLink>

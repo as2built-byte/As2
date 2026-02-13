@@ -1,7 +1,8 @@
 /**
  * Notifications Client Service
  * 
- * Client-side service for admin notifications with real-time updates
+ * Client-side service for notifications with real-time updates
+ * Supports admin, expert, and enterprise notifications
  */
 
 import {
@@ -26,7 +27,7 @@ import type { Notification, CreateNotificationData } from '~/types/notification'
 // ========================================
 
 /**
- * Create a new notification for admins
+ * Create a new notification
  */
 export async function createNotification(data: CreateNotificationData): Promise<string> {
     const { $firebaseFirestore } = useNuxtApp()
@@ -77,7 +78,7 @@ export async function getAdminNotifications(): Promise<Notification[]> {
 }
 
 /**
- * Subscribe to real-time notifications updates
+ * Subscribe to real-time admin notifications
  * Returns unsubscribe function
  */
 export function subscribeToNotifications(
@@ -89,8 +90,6 @@ export function subscribeToNotifications(
 
     const notificationsRef = collection(db, 'notifications')
 
-    // Simplified query without orderBy to avoid composite index requirement
-    // We'll sort in memory instead
     const q = query(
         notificationsRef,
         where('targetRole', '==', 'admin'),
@@ -100,8 +99,6 @@ export function subscribeToNotifications(
     return onSnapshot(
         q,
         (snapshot) => {
-            console.log('Notifications snapshot received:', snapshot.docs.length, 'docs')
-            // Map documents and sort by createdAt in memory
             const notifications = snapshot.docs
                 .map(doc => ({
                     id: doc.id,
@@ -109,17 +106,53 @@ export function subscribeToNotifications(
                     createdAt: doc.data().createdAt?.toDate() || new Date()
                 })) as Notification[]
 
-            // Sort by createdAt descending
             notifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-
-            // Take only first 20
-            const limited = notifications.slice(0, 20)
-            console.log('Processed notifications:', limited.length)
-
-            callback(limited)
+            callback(notifications.slice(0, 20))
         },
         (error) => {
             console.error('Firestore onSnapshot error:', error)
+            if (onError) {
+                onError(error as Error)
+            }
+        }
+    )
+}
+
+/**
+ * Subscribe to real-time user-specific notifications (expert/enterprise)
+ * Queries by targetUserId
+ */
+export function subscribeToUserNotifications(
+    userId: string,
+    callback: (notifications: Notification[]) => void,
+    onError?: (error: Error) => void
+): Unsubscribe {
+    const { $firebaseFirestore } = useNuxtApp()
+    const db = $firebaseFirestore as Firestore
+
+    const notificationsRef = collection(db, 'notifications')
+
+    const q = query(
+        notificationsRef,
+        where('targetUserId', '==', userId),
+        limit(50)
+    )
+
+    return onSnapshot(
+        q,
+        (snapshot) => {
+            const notifications = snapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    createdAt: doc.data().createdAt?.toDate() || new Date()
+                })) as Notification[]
+
+            notifications.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+            callback(notifications.slice(0, 20))
+        },
+        (error) => {
+            console.error('Firestore user notifications error:', error)
             if (onError) {
                 onError(error as Error)
             }
@@ -149,7 +182,6 @@ export async function markAllNotificationsAsRead(): Promise<void> {
     const { $firebaseFirestore } = useNuxtApp()
     const db = $firebaseFirestore as Firestore
 
-    // Get all unread notifications
     const notificationsRef = collection(db, 'notifications')
     const q = query(
         notificationsRef,
@@ -159,7 +191,29 @@ export async function markAllNotificationsAsRead(): Promise<void> {
 
     const snapshot = await getDocs(q)
 
-    // Update each one
+    const updatePromises = snapshot.docs.map(docSnap =>
+        updateDoc(doc(db, 'notifications', docSnap.id), { read: true })
+    )
+
+    await Promise.all(updatePromises)
+}
+
+/**
+ * Mark all user-specific notifications as read
+ */
+export async function markAllUserNotificationsAsRead(userId: string): Promise<void> {
+    const { $firebaseFirestore } = useNuxtApp()
+    const db = $firebaseFirestore as Firestore
+
+    const notificationsRef = collection(db, 'notifications')
+    const q = query(
+        notificationsRef,
+        where('targetUserId', '==', userId),
+        where('read', '==', false)
+    )
+
+    const snapshot = await getDocs(q)
+
     const updatePromises = snapshot.docs.map(docSnap =>
         updateDoc(doc(db, 'notifications', docSnap.id), { read: true })
     )

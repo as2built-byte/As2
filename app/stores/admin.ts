@@ -12,19 +12,34 @@ import type {
     UserWithDetails,
     UserStatus
 } from '~/types'
+import type { Project, Mission, Formation } from '~/types'
 import {
     getAllUsers,
     getUsersByStatus,
     updateUserStatus,
     getExpertProfile,
-    getEnterpriseProfile
+    getEnterpriseProfile,
+    getAllProjects,
+    getAllMissionsForAdmin,
+    getAllFormations,
+    getAllPayments
 } from '~/firebase/services/firestore'
 
 const initialStats: AdminDashboardStats = {
     totalUsers: 0,
     pendingUsers: 0,
     totalExperts: 0,
-    totalEnterprises: 0
+    totalEnterprises: 0,
+    totalProjects: 0,
+    activeProjects: 0,
+    completedProjects: 0,
+    totalMissions: 0,
+    pendingMissions: 0,
+    activeMissions: 0,
+    completedMissions: 0,
+    totalFormations: 0,
+    activeFormations: 0,
+    totalPayments: 0
 }
 
 export const useAdminStore = defineStore('admin', {
@@ -34,7 +49,8 @@ export const useAdminStore = defineStore('admin', {
         usersError: null,
         userRoleFilter: 'all',
         userStatusFilter: 'all',
-        stats: { ...initialStats }
+        stats: { ...initialStats },
+        dashboardLoading: false
     }),
 
     getters: {
@@ -245,10 +261,64 @@ export const useAdminStore = defineStore('admin', {
          */
         updateStats(): void {
             this.stats = {
+                ...this.stats,
                 totalUsers: this.users.length,
                 pendingUsers: this.users.filter(u => u.status === 'pending').length,
                 totalExperts: this.users.filter(u => u.role === 'expert').length,
                 totalEnterprises: this.users.filter(u => u.role === 'enterprise').length
+            }
+        },
+
+        /**
+         * Fetch all dashboard data (users, projects, missions, formations, payments)
+         * Used by the admin dashboard page for KPIs and calendar
+         */
+        async fetchDashboardData(): Promise<{
+            projects: Project[]
+            missions: Mission[]
+            formations: Formation[]
+        }> {
+            this.dashboardLoading = true
+            this.usersError = null
+
+            try {
+                // Fetch all data in parallel
+                const [users, projects, missions, formations, payments] = await Promise.all([
+                    getAllUsers(),
+                    getAllProjects(),
+                    getAllMissionsForAdmin(),
+                    getAllFormations(),
+                    getAllPayments()
+                ])
+
+                // Store users (without loading profiles for dashboard speed)
+                this.users = users
+
+                // Compute all stats
+                this.stats = {
+                    totalUsers: users.length,
+                    pendingUsers: users.filter(u => u.status === 'pending').length,
+                    totalExperts: users.filter(u => u.role === 'expert').length,
+                    totalEnterprises: users.filter(u => u.role === 'enterprise').length,
+                    totalProjects: projects.length,
+                    activeProjects: projects.filter(p => p.status === 'active').length,
+                    completedProjects: projects.filter(p => p.status === 'completed').length,
+                    totalMissions: missions.length,
+                    pendingMissions: missions.filter(m => m.status === 'pending_admin').length,
+                    activeMissions: missions.filter(m => m.status === 'accepted' || m.status === 'proposed').length,
+                    completedMissions: missions.filter(m => m.status === 'completed').length,
+                    totalFormations: formations.length,
+                    activeFormations: formations.filter(f => f.isActive).length,
+                    totalPayments: payments.length
+                }
+
+                return { projects, missions, formations }
+            } catch (error) {
+                console.error('Error fetching dashboard data:', error)
+                this.usersError = 'Erreur lors du chargement du tableau de bord'
+                return { projects: [], missions: [], formations: [] }
+            } finally {
+                this.dashboardLoading = false
             }
         },
 

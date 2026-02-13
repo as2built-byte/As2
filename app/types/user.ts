@@ -129,6 +129,20 @@ export interface AdminDashboardStats {
     pendingUsers: number
     totalExperts: number
     totalEnterprises: number
+    // Projects
+    totalProjects: number
+    activeProjects: number
+    completedProjects: number
+    // Missions
+    totalMissions: number
+    pendingMissions: number
+    activeMissions: number
+    completedMissions: number
+    // Formations
+    totalFormations: number
+    activeFormations: number
+    // Payments
+    totalPayments: number
 }
 
 /** Admin store state */
@@ -139,5 +153,6 @@ export interface AdminState {
     userRoleFilter: 'all' | 'expert' | 'enterprise'
     userStatusFilter: 'all' | UserStatus
     stats: AdminDashboardStats
+    dashboardLoading: boolean
 }
 

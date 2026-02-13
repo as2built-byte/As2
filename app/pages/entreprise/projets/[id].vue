@@ -91,10 +91,7 @@ function getProjectStatusConfig(status: string | undefined | null): ProjectStatu
     const defaultConfig: ProjectStatusConfig = { bg: 'bg-emerald-100', text: 'text-emerald-700', icon: 'heroicons:play-circle', label: 'En cours' }
     const configs: Record<string, ProjectStatusConfig> = {
         active: defaultConfig,
-        completed: { bg: 'bg-blue-100', text: 'text-blue-700', icon: 'heroicons:check-circle', label: 'Terminé' },
-        archived: { bg: 'bg-gray-100', text: 'text-gray-500', icon: 'heroicons:archive-box', label: 'Archivé' },
-        // Legacy fallback
-        draft: { bg: 'bg-slate-100', text: 'text-slate-700', icon: 'heroicons:document-text', label: 'En cours' }
+        completed: { bg: 'bg-blue-100', text: 'text-blue-700', icon: 'heroicons:check-circle', label: 'Terminé' }
     }
     return configs[status || 'active'] ?? defaultConfig
 }
@@ -160,6 +157,11 @@ const progress = computed(() => {
     const completed = missionsByStatus.value.completed.length
     return total > 0 ? Math.round((completed / total) * 100) : 0
 })
+
+// Navigate to project management workspace
+function handleGestion() {
+    navigateTo(`/projet/${projectId.value}/documents`)
+}
 </script>
 
 <template>
@@ -216,14 +218,24 @@ const progress = computed(() => {
                         </p>
                     </div>
                     
-                    <!-- Quick action -->
-                    <NuxtLink 
-                        :to="`/entreprise/missions/create?projectId=${projectId}`"
-                        class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm hover:shadow-md transition-all whitespace-nowrap"
-                    >
-                        <Icon name="heroicons:plus-circle" class="w-5 h-5" />
-                        Nouvelle mission
-                    </NuxtLink>
+                    <!-- Quick actions -->
+                    <div class="flex items-center gap-3">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-2 px-5 py-3 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-900 shadow-sm hover:shadow-md transition-all whitespace-nowrap"
+                            @click="handleGestion"
+                        >
+                            <Icon name="heroicons:cog-6-tooth" class="w-5 h-5" />
+                            Gestion
+                        </button>
+                        <NuxtLink 
+                            :to="`/entreprise/missions/create?projectId=${projectId}`"
+                            class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm hover:shadow-md transition-all whitespace-nowrap"
+                        >
+                            <Icon name="heroicons:plus-circle" class="w-5 h-5" />
+                            Nouvelle mission
+                        </NuxtLink>
+                    </div>
                 </div>
                 
                 <!-- Project metadata -->

@@ -23,6 +23,13 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
+    // Check if user is the enterprise owner of a project
+    function isProjectOwner(projectId) {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/projects/$(projectId)) &&
+        get(/databases/$(database)/documents/projects/$(projectId)).data.enterpriseId == request.auth.uid;
+    }
+    
     // ========================================
     // Users Collection
     // ========================================
@@ -114,24 +121,25 @@ service cloud.firestore {
     // Notifications Collection
     // ========================================
     match /notifications/{notificationId} {
-      // Only admins can read notifications
-      allow read: if isAdmin();
+      // Admins can read all notifications, users can read their own
+      allow read: if isAdmin() || 
+                     (isAuthenticated() && resource.data.targetUserId == request.auth.uid);
       
-      // Authenticated users can create notifications (for payment notifications)
+      // Authenticated users can create notifications
       allow create: if isAuthenticated();
       
-      // Only admins can update (mark as read) or delete notifications
-      allow update, delete: if isAdmin();
+      // Admins can update/delete all, users can update (mark as read) their own
+      allow update: if isAdmin() || 
+                       (isAuthenticated() && resource.data.targetUserId == request.auth.uid);
+      allow delete: if isAdmin();
     }
     
     // ========================================
     // Projects Collection
     // ========================================
     match /projects/{projectId} {
-      // Enterprise owner and admins can read their projects
-      allow read: if isAuthenticated() && (
-        resource.data.enterpriseId == request.auth.uid || isAdmin()
-      );
+      // Any authenticated user can read projects (needed for experts to see projects they have missions in)
+      allow read: if isAuthenticated();
       
       // Authenticated enterprises can create their own projects
       allow create: if isAuthenticated() && 
@@ -144,6 +152,116 @@ service cloud.firestore {
       
       // Only admins can delete projects
       allow delete: if isAdmin();
+    }
+    
+    // ========================================
+    // Documents Collection (Project Documents)
+    // ========================================
+    match /documents/{documentId} {
+      // Read: creator (CRUD), or any authenticated user on the same project (R)
+      // Since project read is open to all authenticated, documents follow the same pattern
+      allow read: if isAuthenticated();
+      
+      // Create: any authenticated user (enterprise, expert, admin)
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid;
+      
+      // Update: only the creator (senderId) can update
+      allow update: if isAuthenticated() && 
+        resource.data.senderId == request.auth.uid;
+      
+      // Delete: creator can delete, or enterprise owner of the project
+      allow delete: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+      );
+    }
+    
+    // ========================================
+    // Photos Collection
+    // ========================================
+    match /photos/{photoId} {
+      // Read: any authenticated user
+      allow read: if isAuthenticated();
+      
+      // Create: any authenticated user (enterprise, expert, admin)
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid;
+      
+      // Update: only the creator (senderId) can update
+      allow update: if isAuthenticated() && 
+        resource.data.senderId == request.auth.uid;
+      
+      // Delete: creator can delete, or enterprise owner of the project
+      allow delete: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+      );
+    }
+    
+    // ========================================
+    // Problems Collection
+    // ========================================
+    match /problems/{problemId} {
+      // Read: any authenticated user
+      allow read: if isAuthenticated();
+      
+      // Create: any authenticated user (enterprise, expert, admin)
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid;
+      
+      // Update: only the creator (senderId) can update
+      allow update: if isAuthenticated() && 
+        resource.data.senderId == request.auth.uid;
+      
+      // Delete: creator can delete, or enterprise owner of the project
+      allow delete: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+      );
+    }
+    
+    // ========================================
+    // RFIs Collection
+    // ========================================
+    match /rfis/{rfiId} {
+      // Read: any authenticated user
+      allow read: if isAuthenticated();
+      
+      // Create: any authenticated user
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid;
+      
+      // Update: only the creator (senderId) can update
+      allow update: if isAuthenticated() && 
+        resource.data.senderId == request.auth.uid;
+      
+      // Delete: creator can delete, or enterprise owner of the project
+      allow delete: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+      );
+    }
+    
+    // ========================================
+    // Submissions Collection
+    // ========================================
+    match /submissions/{submissionId} {
+      // Read: any authenticated user
+      allow read: if isAuthenticated();
+      
+      // Create: any authenticated user, status must be 'pending'
+      allow create: if isAuthenticated() && 
+        request.resource.data.senderId == request.auth.uid &&
+        request.resource.data.status == 'pending';
+      
+      // Update: creator can update title/description (not status),
+      //         enterprise owner can update status only
+      allow update: if isAuthenticated() && (
+        (resource.data.senderId == request.auth.uid && request.resource.data.status == resource.data.status) ||
+        (isProjectOwner(resource.data.projectId) && request.resource.data.title == resource.data.title && request.resource.data.description == resource.data.description)
+      );
+      
+      // Delete: creator can delete, or enterprise owner of the project
+      allow delete: if isAuthenticated() && (
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+      );
     }
     
     // ========================================

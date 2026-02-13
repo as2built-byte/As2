@@ -24,6 +24,7 @@ import {
     getUserProfile,
     getAvailableExperts
 } from '~/firebase/services/firestore'
+import { createNotification } from '~/services/notificationsClient'
 
 interface MissionsState {
     missions: MissionWithDetails[]
@@ -385,12 +386,10 @@ export const useMissionsStore = defineStore('missions', {
                 await assignExpertToMission(missionId, expertId)
 
                 // Update local state
-                const index = this.missions.findIndex(m => m.id === missionId)
-                if (index !== -1) {
-                    this.missions[index] = Object.assign({}, this.missions[index], {
-                        expertId,
-                        status: 'proposed' as const
-                    })
+                const mission = this.missions.find(m => m.id === missionId)
+                if (mission) {
+                    const missionTitle = mission.title || 'Mission'
+                    Object.assign(mission, { expertId, status: 'proposed' as const })
                 }
 
                 if (this.currentMission?.id === missionId) {
@@ -399,6 +398,25 @@ export const useMissionsStore = defineStore('missions', {
                         expertId,
                         status: 'proposed'
                     }
+                }
+
+                // Notify the expert about the mission invitation
+                try {
+                    const missionTitle = mission?.title || this.currentMission?.title || 'Mission'
+                    await createNotification({
+                        type: 'mission_invitation',
+                        title: 'Nouvelle invitation de mission',
+                        message: `Vous avez été invité à la mission "${missionTitle}".`,
+                        data: {
+                            itemType: 'mission',
+                            itemId: missionId,
+                            itemTitle: missionTitle
+                        },
+                        targetRole: 'expert',
+                        targetUserId: expertId
+                    })
+                } catch (notifErr) {
+                    console.error('Failed to send invitation notification:', notifErr)
                 }
 
                 return true
@@ -422,11 +440,9 @@ export const useMissionsStore = defineStore('missions', {
                 await acceptMissionService(missionId)
 
                 // Update local state
-                const index = this.missions.findIndex(m => m.id === missionId)
-                if (index !== -1) {
-                    this.missions[index] = Object.assign({}, this.missions[index], {
-                        status: 'accepted' as const
-                    })
+                const mission = this.missions.find(m => m.id === missionId)
+                if (mission) {
+                    Object.assign(mission, { status: 'accepted' as const })
                 }
 
                 if (this.currentMission?.id === missionId) {
@@ -434,6 +450,28 @@ export const useMissionsStore = defineStore('missions', {
                         ...this.currentMission,
                         status: 'accepted'
                     }
+                }
+
+                // Notify the enterprise that expert accepted
+                try {
+                    const enterpriseId = mission?.enterpriseId || this.currentMission?.enterpriseId
+                    const missionTitle = mission?.title || this.currentMission?.title || 'Mission'
+                    if (enterpriseId) {
+                        await createNotification({
+                            type: 'mission_accepted',
+                            title: 'Mission acceptée',
+                            message: `L'expert a accepté la mission "${missionTitle}".`,
+                            data: {
+                                itemType: 'mission',
+                                itemId: missionId,
+                                itemTitle: missionTitle
+                            },
+                            targetRole: 'enterprise',
+                            targetUserId: enterpriseId
+                        })
+                    }
+                } catch (notifErr) {
+                    console.error('Failed to send acceptance notification:', notifErr)
                 }
 
                 return true

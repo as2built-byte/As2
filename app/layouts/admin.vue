@@ -14,6 +14,12 @@ const { profile, logout } = useAuth()
 
 // Sidebar collapsed state
 const sidebarCollapsed = ref(false)
+const mobileOpen = ref(false)
+
+// Close mobile sidebar on route change
+watch(() => route.path, () => {
+    mobileOpen.value = false
+})
 
 // User menu
 const showUserMenu = ref(false)
@@ -37,6 +43,7 @@ const navigation = {
         }
     ],
     content: [
+        { path: '/admin/projets', label: 'Projets', icon: 'heroicons:folder-open', disabled: false },
         { path: '/admin/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: false },
         { path: '/admin/formations', label: 'Formations', icon: 'heroicons:academic-cap', disabled: false },
         { path: '/admin/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
@@ -82,6 +89,7 @@ const pageTitle = computed(() => {
     const path = route.path
     if (path === '/admin') return 'Tableau de bord'
     if (path.includes('/admin/users')) return 'Gestion des utilisateurs'
+    if (path.includes('/admin/projets')) return 'Projets'
     if (path.includes('/admin/missions')) return 'Missions'
     if (path.includes('/admin/subscriptions')) return 'Abonnements'
     if (path.includes('/admin/formations')) return 'Formations'
@@ -105,10 +113,22 @@ function closeUserMenu() {
 
 <template>
     <div class="min-h-screen bg-slate-100">
+        <!-- Mobile sidebar overlay -->
+        <Transition name="fade">
+            <div
+                v-if="mobileOpen"
+                class="fixed inset-0 z-40 bg-black/50 lg:hidden"
+                @click="mobileOpen = false"
+            />
+        </Transition>
+
         <!-- Sidebar -->
         <aside 
             class="fixed inset-y-0 left-0 z-50 flex flex-col bg-slate-900 transition-all duration-300"
-            :class="sidebarCollapsed ? 'w-20' : 'w-64'"
+            :class="[
+                sidebarCollapsed ? 'w-20' : 'w-64',
+                mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+            ]"
         >
             <!-- Logo -->
             <div class="h-16 flex items-center justify-between px-4 border-b border-slate-700">
@@ -244,12 +264,19 @@ function closeUserMenu() {
         <!-- Main Content Area -->
         <div 
             class="transition-all duration-300"
-            :class="sidebarCollapsed ? 'ml-20' : 'ml-64'"
+            :class="sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'"
         >
             <!-- Top Header -->
-            <header class="sticky top-0 z-40 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
-                <!-- Page Title -->
-                <div>
+            <header class="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6">
+                <!-- Mobile menu button + Page Title -->
+                <div class="flex items-center gap-3">
+                    <button
+                        type="button"
+                        class="lg:hidden p-2 -ml-2 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+                        @click="mobileOpen = true"
+                    >
+                        <Icon name="heroicons:bars-3" class="w-6 h-6" />
+                    </button>
                     <h1 class="text-xl font-semibold text-slate-800">{{ pageTitle }}</h1>
                 </div>
 
@@ -310,12 +337,22 @@ function closeUserMenu() {
             </main>
         </div>
 
-        <!-- Overlay for mobile or click outside -->
+        <!-- Overlay for user menu click outside -->
         <div 
             v-if="showUserMenu" 
-            class="fixed inset-0 z-30" 
+            class="fixed inset-0 z-20" 
             @click="closeUserMenu"
         ></div>
     </div>
 </template>
 
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+    transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+    opacity: 0;
+}
+</style>
