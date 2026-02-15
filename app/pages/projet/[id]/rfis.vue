@@ -7,6 +7,7 @@ import {
     deleteRFI,
     getUserProfile,
     getProject,
+    isUserAssignedToProject,
 } from '~/firebase/services/firestore'
 
 definePageMeta({
@@ -25,6 +26,7 @@ const loading = ref(true)
 const error = ref<string | null>(null)
 const searchQuery = ref('')
 const projectEnterpriseId = ref<string>('')
+const isAssignedMember = ref(false)
 
 // Create form
 const showCreateForm = ref(false)
@@ -81,6 +83,9 @@ onMounted(async () => {
     try {
         const proj = await getProject(projectId.value)
         if (proj) projectEnterpriseId.value = proj.enterpriseId
+        if (user.value?.uid && profile.value?.enterpriseOwnerId) {
+            isAssignedMember.value = await isUserAssignedToProject(user.value.uid, projectId.value)
+        }
     } catch (e) { /* ignore */ }
     await loadRFIs()
 })
@@ -103,7 +108,7 @@ function canEdit(rfi: ProjectRFI): boolean {
 }
 
 function canDelete(rfi: ProjectRFI): boolean {
-    return rfi.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value
+    return rfi.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value || isAssignedMember.value
 }
 
 // Create RFI

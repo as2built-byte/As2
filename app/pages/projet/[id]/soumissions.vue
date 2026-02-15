@@ -8,6 +8,7 @@ import {
     deleteSubmission,
     getUserProfile,
     getProject,
+    isUserAssignedToProject,
 } from '~/firebase/services/firestore'
 
 definePageMeta({
@@ -27,6 +28,7 @@ const error = ref<string | null>(null)
 const searchQuery = ref('')
 const statusFilter = ref<'all' | SubmissionStatus>('all')
 const projectEnterpriseId = ref<string>('')
+const isAssignedMember = ref(false)
 
 // Create form
 const showCreateForm = ref(false)
@@ -93,6 +95,10 @@ onMounted(async () => {
     try {
         const proj = await getProject(projectId.value)
         if (proj) projectEnterpriseId.value = proj.enterpriseId
+        // Check if current user is an assigned member for this project
+        if (user.value?.uid && profile.value?.enterpriseOwnerId) {
+            isAssignedMember.value = await isUserAssignedToProject(user.value.uid, projectId.value)
+        }
     } catch (e) { /* ignore */ }
     await loadSubmissions()
 })
@@ -114,7 +120,7 @@ const currentUserId = computed(() => user.value?.uid || '')
 const currentRole = computed(() => profile.value?.role || '')
 const isExpert = computed(() => currentRole.value === 'expert')
 const isAdmin = computed(() => currentRole.value === 'admin')
-const isEnterpriseOwner = computed(() => currentUserId.value === projectEnterpriseId.value)
+const isEnterpriseOwner = computed(() => currentUserId.value === projectEnterpriseId.value || isAssignedMember.value)
 
 // Experts and admin can create submissions
 const canCreate = computed(() => isExpert.value || isAdmin.value)

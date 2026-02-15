@@ -17,7 +17,7 @@ definePageMeta({
     middleware: ['auth']
 })
 
-const { user, profile } = useAuth()
+const { user, profile, isMember } = useAuth()
 const projectsStore = useProjectsStore()
 const missionsStore = useMissionsStore()
 const router = useRouter()
@@ -57,10 +57,22 @@ function getMissionCount(projectId: string): number {
 // Fetch projects and missions when user is available
 watch(() => user.value?.uid, async (uid) => {
     if (uid) {
-        await Promise.all([
-            projectsStore.fetchProjects(uid),
-            missionsStore.fetchMissionsByEnterprise(uid)
-        ])
+        // Load projects first
+        if (isMember.value) {
+            await projectsStore.fetchMemberProjects(uid)
+            // Members: load missions only for their assigned projects
+            if (projectsStore.projects.length > 0) {
+                const projectIds = projectsStore.projects.map(p => p.id)
+                await missionsStore.fetchMissionsForProjects(projectIds)
+            }
+        } else {
+            // Gérant: load all projects and missions
+            const enterpriseId = uid
+            await Promise.all([
+                projectsStore.fetchProjects(enterpriseId),
+                missionsStore.fetchMissionsByEnterprise(enterpriseId)
+            ])
+        }
     }
 }, { immediate: true })
 
@@ -101,39 +113,41 @@ function formatDate(date: Date): string {
                     <p class="text-slate-600 mt-2">Gérez et suivez vos projets de construction BIM</p>
                 </div>
                 
-                <!-- Create button or subscription CTA -->
-                <div v-if="projectsStore.canCreateMore">
-                    <NuxtLink 
-                        to="/entreprise/projets/create"
-                        class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm hover:shadow-md transition-all"
-                    >
-                        <Icon name="heroicons:plus-circle" class="w-5 h-5" />
-                        Nouveau projet
-                    </NuxtLink>
-                </div>
-                <div v-else-if="!projectsStore.subscriptionRequestPending" class="text-right">
-                    <div class="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5">
-                        <Icon name="heroicons:star" class="w-5 h-5 text-blue-600" />
-                        <div class="text-left">
-                            <p class="text-sm font-semibold text-slate-900">Limite atteinte</p>
-                            <p class="text-xs text-slate-600">Vous avez utilisé votre projet gratuit</p>
-                        </div>
-                        <button
-                            type="button"
-                            class="ms-2 text-sm font-medium text-blue-600 hover:text-blue-700 underline disabled:opacity-50"
-                            :disabled="isRequestingSubscription"
-                            @click="handleRequestSubscription"
+                <!-- Create button or subscription CTA (gérant only) -->
+                <template v-if="!isMember">
+                    <div v-if="projectsStore.canCreateMore">
+                        <NuxtLink 
+                            to="/entreprise/projets/create"
+                            class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm hover:shadow-md transition-all"
                         >
-                            {{ isRequestingSubscription ? 'Envoi...' : 'Demander un abonnement' }}
-                        </button>
+                            <Icon name="heroicons:plus-circle" class="w-5 h-5" />
+                            Nouveau projet
+                        </NuxtLink>
                     </div>
-                </div>
-                <div v-else class="text-right">
-                    <div class="inline-flex items-center gap-2 px-5 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg font-medium">
-                        <Icon name="heroicons:check-circle" class="w-5 h-5" />
-                        Demande d'abonnement envoyée (en attente)
+                    <div v-else-if="!projectsStore.subscriptionRequestPending" class="text-right">
+                        <div class="inline-flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-lg px-4 py-2.5">
+                            <Icon name="heroicons:star" class="w-5 h-5 text-blue-600" />
+                            <div class="text-left">
+                                <p class="text-sm font-semibold text-slate-900">Limite atteinte</p>
+                                <p class="text-xs text-slate-600">Vous avez utilisé votre projet gratuit</p>
+                            </div>
+                            <button
+                                type="button"
+                                class="ms-2 text-sm font-medium text-blue-600 hover:text-blue-700 underline disabled:opacity-50"
+                                :disabled="isRequestingSubscription"
+                                @click="handleRequestSubscription"
+                            >
+                                {{ isRequestingSubscription ? 'Envoi...' : 'Demander un abonnement' }}
+                            </button>
+                        </div>
                     </div>
-                </div>
+                    <div v-else class="text-right">
+                        <div class="inline-flex items-center gap-2 px-5 py-3 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg font-medium">
+                            <Icon name="heroicons:check-circle" class="w-5 h-5" />
+                            Demande d'abonnement envoyée (en attente)
+                        </div>
+                    </div>
+                </template>
             </div>
             
             <!-- Quick stats -->
@@ -177,7 +191,7 @@ function formatDate(date: Date): string {
                             <Icon name="heroicons:briefcase" class="w-5 h-5 text-purple-600" />
                         </div>
                         <div>
-                            <p class="text-2xl font-bold text-slate-900">0</p>
+                            <p class="text-2xl font-bold text-slate-900">{{ missionsStore.missions.filter(m => m.status === 'accepted').length }}</p>
                             <p class="text-xs text-slate-500">Missions actives</p>
                         </div>
                     </div>

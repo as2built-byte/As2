@@ -6,12 +6,13 @@
  * showing only the projects belonging to this enterprise.
  */
 
-import type { Project, Mission, Formation } from '~/types'
+import type { Project, Mission, ProjectSubmission } from '~/types'
 import {
     getProjectsByEnterprise,
     getMissionsByEnterprise,
-    getPaymentsByUser,
-    getFormation,
+    getMissionsByProject,
+    getSubmissionsByProject,
+    getProjectsByMember,
 } from '~/firebase/services/firestore'
 
 definePageMeta({
@@ -19,7 +20,7 @@ definePageMeta({
     middleware: ['auth'],
 })
 
-const { user } = useAuth()
+const { user, isMember, profile } = useAuth()
 
 // State
 const loading = ref(true)
@@ -27,8 +28,7 @@ const error = ref<string | null>(null)
 
 const projects = ref<Project[]>([])
 const missions = ref<Mission[]>([])
-const formationsActive = ref(0)
-const formationsCompleted = ref(0)
+const submissions = ref<ProjectSubmission[]>([])
 
 // Load all data
 async function loadDashboard() {
@@ -36,23 +36,37 @@ async function loadDashboard() {
     loading.value = true
     error.value = null
     try {
-        // Fetch projects and missions in parallel
-        const [projectsData, missionsData] = await Promise.all([
-            getProjectsByEnterprise(user.value.uid),
-            getMissionsByEnterprise(user.value.uid),
-        ])
+        // Members see only assigned projects, gérant sees all
+        const projectsData = isMember.value
+            ? await getProjectsByMember(user.value.uid)
+            : await getProjectsByEnterprise(user.value.uid)
+
+        // For missions: gérant sees all enterprise missions, members see only missions for their assigned projects
+        let missionsData: Mission[] = []
+        if (isMember.value) {
+            // Members: fetch missions only for their assigned projects
+            const assignedProjectIds = projectsData.map(p => p.id)
+            if (assignedProjectIds.length > 0) {
+                const missionPromises = assignedProjectIds.map(projectId => 
+                    getMissionsByProject(projectId)
+                )
+                const allMissions = await Promise.all(missionPromises)
+                missionsData = allMissions.flat()
+            }
+        } else {
+            // Gérant: fetch all missions for the enterprise
+            missionsData = await getMissionsByEnterprise(user.value.uid)
+        }
+
         projects.value = projectsData
         missions.value = missionsData
 
-        // Fetch user formations via payments
-        const payments = await getPaymentsByUser(user.value.uid)
-        const formationPayments = payments.filter(p => p.itemType === 'formation')
-        const uniqueFormationIds = [...new Set(formationPayments.map(p => p.itemId))]
-        if (uniqueFormationIds.length > 0) {
-            const formations = await Promise.all(uniqueFormationIds.map(id => getFormation(id)))
-            const validFormations = formations.filter((f): f is Formation => f !== null)
-            formationsActive.value = validFormations.filter(f => f.isActive).length
-            formationsCompleted.value = validFormations.filter(f => !f.isActive).length
+        // Fetch submissions across all projects
+        if (projectsData.length > 0) {
+            const allSubmissions = await Promise.all(
+                projectsData.map(p => getSubmissionsByProject(p.id))
+            )
+            submissions.value = allSubmissions.flat()
         }
     } catch (e) {
         console.error('Error loading enterprise dashboard:', e)
@@ -73,6 +87,21 @@ const completedProjects = computed(() => projects.value.filter(p => p.status ===
 const activeMissions = computed(() => missions.value.filter(m => m.status === 'accepted' || m.status === 'proposed').length)
 const completedMissions = computed(() => missions.value.filter(m => m.status === 'completed').length)
 const pendingMissions = computed(() => missions.value.filter(m => m.status === 'pending_admin').length)
+
+// Submissions KPIs
+const pendingSubmissions = computed(() => submissions.value.filter(s => s.status === 'pending').length)
+const approvedSubmissions = computed(() => submissions.value.filter(s => s.status === 'approved').length)
+const rejectedSubmissions = computed(() => submissions.value.filter(s => s.status === 'rejected').length)
+
+// Unique active experts (from accepted/completed missions)
+const activeExperts = computed(() => {
+    const expertIds = new Set(
+        missions.value
+            .filter(m => m.status === 'accepted' || m.status === 'completed')
+            .map(m => m.expertId)
+    )
+    return expertIds.size
+})
 
 // ========================================
 // Calendar Logic
@@ -249,35 +278,31 @@ function selectDay(day: typeof calendarDays.value[number]): void {
                     </div>
                 </div>
 
-                <!-- Formations en cours -->
+                <!-- Soumissions en attente -->
                 <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
                     <div class="flex items-center justify-between mb-3">
-                        <span class="text-sm font-medium text-slate-500">Formations en cours</span>
-                        <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center">
-                            <Icon name="heroicons:academic-cap" class="w-5 h-5 text-purple-600" />
+                        <span class="text-sm font-medium text-slate-500">Soumissions</span>
+                        <div class="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center">
+                            <Icon name="heroicons:paper-airplane" class="w-5 h-5 text-amber-600" />
                         </div>
                     </div>
-                    <p class="text-3xl font-bold text-slate-900">{{ formationsActive }}</p>
-                    <NuxtLink
-                        v-if="formationsActive > 0"
-                        to="/entreprise/formations"
-                        class="text-sm text-purple-600 hover:text-purple-700 font-medium mt-1 inline-block"
-                    >
-                        Voir les formations →
-                    </NuxtLink>
-                    <p v-else class="text-sm text-slate-400 mt-1">Aucune formation active</p>
+                    <p class="text-3xl font-bold text-slate-900">{{ pendingSubmissions }}</p>
+                    <div class="flex items-center gap-3 mt-1">
+                        <span class="text-xs text-amber-600 font-medium">{{ pendingSubmissions }} en attente</span>
+                        <span class="text-xs text-emerald-600">{{ approvedSubmissions }} approuvées</span>
+                    </div>
                 </div>
 
-                <!-- Formations terminées -->
+                <!-- Experts actifs -->
                 <div class="bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
                     <div class="flex items-center justify-between mb-3">
-                        <span class="text-sm font-medium text-slate-500">Formations terminées</span>
-                        <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center">
-                            <Icon name="heroicons:check-badge" class="w-5 h-5 text-emerald-600" />
+                        <span class="text-sm font-medium text-slate-500">Experts actifs</span>
+                        <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center">
+                            <Icon name="heroicons:user-group" class="w-5 h-5 text-purple-600" />
                         </div>
                     </div>
-                    <p class="text-3xl font-bold text-slate-900">{{ formationsCompleted }}</p>
-                    <p class="text-sm text-slate-400 mt-1">formations complétées</p>
+                    <p class="text-3xl font-bold text-slate-900">{{ activeExperts }}</p>
+                    <p class="text-sm text-slate-400 mt-1">experts sur vos projets</p>
                 </div>
             </div>
 

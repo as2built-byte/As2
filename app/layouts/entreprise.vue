@@ -10,7 +10,7 @@
  */
 
 const route = useRoute()
-const { profile, user, logout } = useAuth()
+const { profile, user, logout, isGerant } = useAuth()
 
 import { useNotificationsStore } from '~/stores/notifications'
 const notificationsStore = useNotificationsStore()
@@ -39,29 +39,40 @@ watch(() => route.path, () => {
 const showUserMenu = ref(false)
 
 // Navigation structure - organized by sections (Enterprise specific)
-const navigation = {
-    main: [
-        { 
-            path: '/entreprise', 
-            label: 'Tableau de bord', 
-            icon: 'heroicons:home',
-            exact: true,
-            disabled: false
-        }
-    ],
-    missions: [
-        { path: '/entreprise/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: false }
-    ],
-    projects: [
-        { path: '/entreprise/projets', label: 'Nos projets', icon: 'heroicons:folder-open', disabled: false }
-    ],
-    audits: [
-        { path: '/entreprise/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
-    ],
-    training: [
-        { path: '/entreprise/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false }
-    ]
-}
+const navigation = computed(() => {
+    const nav: Record<string, Array<{ path: string; label: string; icon: string; exact?: boolean; disabled: boolean }>> = {
+        main: [
+            { 
+                path: '/entreprise', 
+                label: 'Tableau de bord', 
+                icon: 'heroicons:home',
+                exact: true,
+                disabled: false
+            }
+        ],
+        missions: [
+            { path: '/entreprise/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: false }
+        ],
+        projects: [
+            { path: '/entreprise/projets', label: 'Nos projets', icon: 'heroicons:folder-open', disabled: false }
+        ],
+    }
+
+    // Only gérant can see Audits, Formations/Packs, and Membres sections
+    if (isGerant.value) {
+        nav.audits = [
+            { path: '/entreprise/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
+        ]
+        nav.training = [
+            { path: '/entreprise/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false }
+        ]
+        nav.membres = [
+            { path: '/entreprise/membres', label: 'Membres', icon: 'heroicons:user-group', disabled: false }
+        ]
+    }
+
+    return nav
+})
 
 // Check if route is active
 function isActive(item: { path: string; exact?: boolean }): boolean {
@@ -80,6 +91,7 @@ const pageTitle = computed(() => {
     if (path.includes('/entreprise/projets')) return 'Nos projets'
     if (path.includes('/entreprise/audits')) return 'Audits'
     if (path.includes('/entreprise/formations') || path.includes('/entreprise/packs')) return 'Formations/Packs'
+    if (path.includes('/entreprise/membres')) return 'Membres'
     return 'Espace Entreprise'
 })
 
@@ -174,9 +186,6 @@ function closeUserMenu() {
 
                 <!-- Recrutement Section -->
                 <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Recrutement
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.missions" :key="item.path">
                             <NuxtLink 
@@ -204,9 +213,6 @@ function closeUserMenu() {
 
                 <!-- Projets Section -->
                 <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Projets
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.projects" :key="item.path">
                             <NuxtLink 
@@ -232,11 +238,8 @@ function closeUserMenu() {
                     </div>
                 </div>
 
-                <!-- Audit Section -->
-                <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Audit BIM
-                    </p>
+                <!-- Audit Section (gérant only) -->
+                <div v-if="isGerant && navigation.audits" class="mt-8">
                     <div class="space-y-1">
                         <div 
                             v-for="item in navigation.audits" 
@@ -251,11 +254,8 @@ function closeUserMenu() {
                     </div>
                 </div>
 
-                <!-- Formation Section -->
-                <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Formation
-                    </p>
+                <!-- Formation Section (gérant only) -->
+                <div v-if="isGerant && navigation.training" class="mt-8">
                     <div class="space-y-1">
                         <template v-for="item in navigation.training" :key="item.path">
                             <NuxtLink 
@@ -277,6 +277,24 @@ function closeUserMenu() {
                                 <span v-if="!sidebarCollapsed" class="flex-1">{{ item.label }}</span>
                                 <span v-if="!sidebarCollapsed" class="text-xs text-slate-600">Bientôt</span>
                             </div>
+                        </template>
+                    </div>
+                </div>
+
+                <!-- Membres Section (gérant only) -->
+                <div v-if="navigation.membres" class="mt-8">
+                    <div class="space-y-1">
+                        <template v-for="item in navigation.membres" :key="item.path">
+                            <NuxtLink 
+                                v-if="!item.disabled"
+                                :to="item.path"
+                                class="admin-nav-item"
+                                :class="{ 'admin-nav-item-active': isActive(item) }"
+                                :title="sidebarCollapsed ? item.label : undefined"
+                            >
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed">{{ item.label }}</span>
+                            </NuxtLink>
                         </template>
                     </div>
                 </div>

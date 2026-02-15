@@ -27,6 +27,7 @@ export interface UserProfile {
     phone: string
     role: UserRole
     status: UserStatus
+    enterpriseOwnerId?: string  // Set for members created by a gérant (value = gérant's uid)
     createdAt: Date
 }
 
@@ -38,6 +39,7 @@ export interface CreateUserData {
     phone: string
     role: UserRole
     status: UserStatus
+    enterpriseOwnerId?: string
 }
 
 // ========================================
@@ -99,6 +101,28 @@ export interface EnterpriseRegistrationForm {
     firstName: string
     lastName: string
     phone: string
+}
+
+// ========================================
+// Member (Project Manager) Types
+// ========================================
+
+/** Data for creating a member account (by gérant) */
+export interface CreateMemberData {
+    firstName: string
+    lastName: string
+    email: string
+    phone: string
+    password: string
+}
+
+/** Project-member assignment stored in 'project_members' collection */
+export interface ProjectMember {
+    id: string
+    projectId: string
+    memberId: string
+    assignedAt: Date
+    assignedBy: string
 }
 
 // ========================================

@@ -166,9 +166,6 @@ function closeUserMenu() {
 
                 <!-- Missions Section -->
                 <div class="mt-6">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Missions
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.missions" :key="item.path">
                             <NuxtLink 
@@ -196,9 +193,6 @@ function closeUserMenu() {
 
                 <!-- Projects Section -->
                 <div class="mt-6">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Projets
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.projects" :key="item.path">
                             <NuxtLink 
@@ -226,9 +220,6 @@ function closeUserMenu() {
 
                 <!-- Training Section -->
                 <div class="mt-6">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Formation
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.training" :key="item.path">
                             <NuxtLink 
@@ -256,9 +247,6 @@ function closeUserMenu() {
 
                 <!-- Profile Section -->
                 <div class="mt-6">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Compte
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.profile" :key="item.path">
                             <NuxtLink 

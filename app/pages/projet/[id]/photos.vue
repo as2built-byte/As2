@@ -7,6 +7,7 @@ import {
     deletePhoto,
     getUserProfile,
     getProject,
+    isUserAssignedToProject,
 } from '~/firebase/services/firestore'
 import {
     uploadProjectPhoto,
@@ -30,6 +31,7 @@ const error = ref<string | null>(null)
 const uploading = ref(false)
 const searchQuery = ref('')
 const projectEnterpriseId = ref<string>('')
+const isAssignedMember = ref(false)
 
 // Upload form
 const showUploadForm = ref(false)
@@ -90,6 +92,9 @@ onMounted(async () => {
     try {
         const proj = await getProject(projectId.value)
         if (proj) projectEnterpriseId.value = proj.enterpriseId
+        if (user.value?.uid && profile.value?.enterpriseOwnerId) {
+            isAssignedMember.value = await isUserAssignedToProject(user.value.uid, projectId.value)
+        }
     } catch (e) { /* ignore */ }
     await loadPhotos()
 })
@@ -111,7 +116,7 @@ function canEdit(photo: ProjectPhoto): boolean {
 }
 
 function canDelete(photo: ProjectPhoto): boolean {
-    return photo.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value
+    return photo.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value || isAssignedMember.value
 }
 
 // File selection for upload

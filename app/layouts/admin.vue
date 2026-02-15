@@ -177,9 +177,6 @@ function closeUserMenu() {
 
                 <!-- Users Section -->
                 <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Utilisateurs
-                    </p>
                     <div class="space-y-1">
                         <NuxtLink 
                             v-for="item in navigation.users" 
@@ -197,9 +194,6 @@ function closeUserMenu() {
 
                 <!-- Content Section -->
                 <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Contenu
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.content" :key="item.path">
                             <!-- Active link -->
@@ -229,9 +223,6 @@ function closeUserMenu() {
 
                 <!-- Finance Section -->
                 <div class="mt-8">
-                    <p v-if="!sidebarCollapsed" class="px-3 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                        Finance
-                    </p>
                     <div class="space-y-1">
                         <template v-for="item in navigation.finance" :key="item.path">
                             <!-- Active link -->

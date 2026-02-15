@@ -96,9 +96,28 @@ export function onAuthStateChange(
 }
 
 /**
- * Wait for the initial auth state to be determined
- * Useful for SSR/hydration scenarios
+ * Create a new Firebase Auth user WITHOUT signing in as that user.
+ * Uses a temporary secondary Firebase app instance to avoid disrupting the current session.
+ * Used by the gérant to create member accounts.
  */
+export async function createUserWithoutSignIn(
+    email: string,
+    password: string
+): Promise<string> {
+    const { initializeApp, deleteApp } = await import('firebase/app')
+    const { getAuth, createUserWithEmailAndPassword } = await import('firebase/auth')
+    const { firebaseConfig } = await import('../config')
+
+    const secondaryApp = initializeApp(firebaseConfig, 'secondary-' + Date.now())
+    try {
+        const secondaryAuth = getAuth(secondaryApp)
+        const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password)
+        return credential.user.uid
+    } finally {
+        await deleteApp(secondaryApp)
+    }
+}
+
 export function waitForAuthReady(): Promise<User | null> {
     return new Promise((resolve) => {
         const auth = getFirebaseAuth()

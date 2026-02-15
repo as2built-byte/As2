@@ -7,6 +7,7 @@ import {
     deleteDocument,
     getUserProfile,
     getProject,
+    isUserAssignedToProject,
 } from '~/firebase/services/firestore'
 import {
     uploadProjectDocument,
@@ -31,6 +32,7 @@ const uploading = ref(false)
 const searchQuery = ref('')
 const typeFilter = ref<'all' | DocumentType>('all')
 const projectEnterpriseId = ref<string>('')
+const isAssignedMember = ref(false)
 
 // Upload form
 const showUploadForm = ref(false)
@@ -90,6 +92,9 @@ onMounted(async () => {
     try {
         const proj = await getProject(projectId.value)
         if (proj) projectEnterpriseId.value = proj.enterpriseId
+        if (user.value?.uid && profile.value?.enterpriseOwnerId) {
+            isAssignedMember.value = await isUserAssignedToProject(user.value.uid, projectId.value)
+        }
     } catch (e) { /* ignore */ }
     await loadDocuments()
 })
@@ -114,7 +119,7 @@ function canEdit(doc: ProjectDocument): boolean {
 }
 
 function canDelete(doc: ProjectDocument): boolean {
-    return doc.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value
+    return doc.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value || isAssignedMember.value
 }
 
 // File selection

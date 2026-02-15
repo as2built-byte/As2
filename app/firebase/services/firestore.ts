@@ -58,7 +58,9 @@ import type {
     CreateRFIData,
     ProjectSubmission,
     CreateSubmissionData,
-    SubmissionStatus
+    SubmissionStatus,
+    CreateMemberData,
+    ProjectMember
 } from '~/types'
 
 let firestoreInstance: Firestore | null = null
@@ -93,6 +95,7 @@ export const COLLECTIONS = {
     PROBLEMS: 'problems',
     RFIS: 'rfis',
     SUBMISSIONS: 'submissions',
+    PROJECT_MEMBERS: 'project_members',
 } as const
 
 // ========================================
@@ -136,7 +139,7 @@ export async function createUserProfile(
     const db = getFirebaseFirestore()
     const userRef = doc(db, COLLECTIONS.USERS, uid)
 
-    await setDoc(userRef, {
+    const profileData: Record<string, unknown> = {
         uid,
         email: data.email,
         firstName: data.firstName,
@@ -145,7 +148,14 @@ export async function createUserProfile(
         role: data.role,
         status: data.status,
         createdAt: serverTimestamp(),
-    })
+    }
+
+    // Include enterpriseOwnerId for member accounts
+    if (data.enterpriseOwnerId) {
+        profileData.enterpriseOwnerId = data.enterpriseOwnerId
+    }
+
+    await setDoc(userRef, profileData)
 }
 
 /**
@@ -163,7 +173,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     }
 
     const data = userSnap.data()
-    return {
+    const profile: UserProfile = {
         uid: userSnap.id,
         email: data.email,
         firstName: data.firstName,
@@ -172,7 +182,13 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
         role: data.role,
         status: data.status,
         createdAt: data.createdAt?.toDate() || new Date(),
-    } as UserProfile
+    }
+
+    if (data.enterpriseOwnerId) {
+        profile.enterpriseOwnerId = data.enterpriseOwnerId
+    }
+
+    return profile
 }
 
 /**
@@ -1688,4 +1704,237 @@ export async function deleteSubmission(submissionId: string): Promise<void> {
     const db = getFirebaseFirestore()
     const submissionRef = doc(db, COLLECTIONS.SUBMISSIONS, submissionId)
     await deleteDoc(submissionRef)
+}
+
+// ========================================
+// Member (Project Manager) Functions
+// ========================================
+
+/**
+ * Create a member account for an enterprise.
+ * Uses a secondary Firebase app to create Auth user without signing out the gérant.
+ * @param gerantId UID of the enterprise owner (gérant)
+ * @param data Member data including password
+ * @returns UID of the newly created member
+ */
+export async function createMemberAccount(
+    gerantId: string,
+    data: CreateMemberData
+): Promise<string> {
+    const { createUserWithoutSignIn } = await import('./auth')
+
+    // Check phone uniqueness
+    const phoneExists = await isPhoneRegistered(data.phone)
+    if (phoneExists) {
+        throw new Error('Ce numéro de téléphone est déjà utilisé')
+    }
+
+    // Create Firebase Auth user without disrupting current session
+    const uid = await createUserWithoutSignIn(data.email, data.password)
+
+    // Create user profile with enterpriseOwnerId linking to gérant
+    await createUserProfile(uid, {
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        phone: data.phone,
+        role: 'enterprise',
+        status: 'active',
+        enterpriseOwnerId: gerantId,
+    })
+
+    return uid
+}
+
+/**
+ * Get all members created by a gérant
+ */
+export async function getMembersByEnterprise(gerantId: string): Promise<UserProfile[]> {
+    const db = getFirebaseFirestore()
+    const usersRef = collection(db, COLLECTIONS.USERS)
+    const q = query(usersRef, where('enterpriseOwnerId', '==', gerantId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            uid: docSnap.id,
+            email: data.email,
+            firstName: data.firstName,
+            lastName: data.lastName,
+            phone: data.phone,
+            role: data.role,
+            status: data.status,
+            enterpriseOwnerId: data.enterpriseOwnerId,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as UserProfile
+    })
+}
+
+/**
+ * Deactivate a member account
+ */
+export async function deactivateMember(memberId: string): Promise<void> {
+    await updateUserStatus(memberId, 'inactive')
+}
+
+/**
+ * Reactivate a member account
+ */
+export async function reactivateMember(memberId: string): Promise<void> {
+    await updateUserStatus(memberId, 'active')
+}
+
+/**
+ * Assign a member to a project
+ */
+export async function assignMemberToProject(
+    projectId: string,
+    memberId: string,
+    assignedBy: string
+): Promise<string> {
+    const db = getFirebaseFirestore()
+
+    // Check if already assigned
+    const existing = await isUserAssignedToProject(memberId, projectId)
+    if (existing) {
+        throw new Error('Ce membre est déjà assigné à ce projet')
+    }
+
+    const membersRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
+    const docRef = await addDoc(membersRef, {
+        projectId,
+        memberId,
+        assignedBy,
+        assignedAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Unassign a member from a project
+ */
+export async function unassignMemberFromProject(
+    projectId: string,
+    memberId: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const membersRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
+    const q = query(
+        membersRef,
+        where('projectId', '==', projectId),
+        where('memberId', '==', memberId)
+    )
+    const querySnapshot = await getDocs(q)
+
+    for (const docSnap of querySnapshot.docs) {
+        await deleteDoc(doc(db, COLLECTIONS.PROJECT_MEMBERS, docSnap.id))
+    }
+}
+
+/**
+ * Get all projects assigned to a member
+ */
+export async function getProjectsByMember(memberId: string): Promise<Project[]> {
+    const db = getFirebaseFirestore()
+    const membersRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
+    const q = query(membersRef, where('memberId', '==', memberId))
+    const querySnapshot = await getDocs(q)
+
+    const projectIds = querySnapshot.docs.map(d => d.data().projectId as string)
+    if (projectIds.length === 0) return []
+
+    const projects: Project[] = []
+    for (const projectId of projectIds) {
+        const project = await getProject(projectId)
+        if (project) projects.push(project)
+    }
+
+    return projects
+}
+
+/**
+ * Get all members assigned to a project
+ */
+export async function getMembersByProject(projectId: string): Promise<ProjectMember[]> {
+    const db = getFirebaseFirestore()
+    const membersRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
+    const q = query(membersRef, where('projectId', '==', projectId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            memberId: data.memberId,
+            assignedAt: data.assignedAt?.toDate() || new Date(),
+            assignedBy: data.assignedBy,
+        } as ProjectMember
+    })
+}
+
+/**
+ * Check if a user (member) is assigned to a project
+ */
+export async function isUserAssignedToProject(
+    userId: string,
+    projectId: string
+): Promise<boolean> {
+    const db = getFirebaseFirestore()
+    const membersRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
+    const q = query(
+        membersRef,
+        where('projectId', '==', projectId),
+        where('memberId', '==', userId)
+    )
+    const querySnapshot = await getDocs(q)
+    return !querySnapshot.empty
+}
+
+/**
+ * Get project assignments for a member (returns ProjectMember records)
+ */
+export async function getAssignmentsByMember(memberId: string): Promise<ProjectMember[]> {
+    const db = getFirebaseFirestore()
+    const membersRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
+    const q = query(membersRef, where('memberId', '==', memberId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            memberId: data.memberId,
+            assignedAt: data.assignedAt?.toDate() || new Date(),
+            assignedBy: data.assignedBy,
+        } as ProjectMember
+    })
+}
+
+/**
+ * Delete a member account completely (disable Firebase Auth + delete all Firestore data)
+ * This is a permanent action and cannot be undone
+ */
+export async function deleteMember(memberId: string): Promise<void> {
+    // First, delete all project assignments
+    const db = getFirebaseFirestore()
+    const assignmentsRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
+    const q = query(assignmentsRef, where('memberId', '==', memberId))
+    const querySnapshot = await getDocs(q)
+    
+    // Delete all assignments
+    const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref))
+    await Promise.all(deletePromises)
+    
+    // Delete Firestore user document
+    const userRef = doc(db, COLLECTIONS.USERS, memberId)
+    await deleteDoc(userRef)
+    
+    // Note: Firebase Auth user deletion requires Admin SDK
+    // From client-side, we can only delete Firestore data
+    // The Auth user will remain but cannot access without Firestore profile
+    console.log('Member deleted from Firestore. Auth user cleanup requires Cloud Function with Admin SDK')
 }

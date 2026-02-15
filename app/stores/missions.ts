@@ -87,7 +87,11 @@ export const useMissionsStore = defineStore('missions', {
 
                 // Configure filters based on role to satisfy Firestore rules
                 if (authStore.user?.uid) {
-                    if (authStore.userRole === 'enterprise') {
+                    if (authStore.isMember) {
+                        // Member: enterpriseId is the gérant's uid (stored in enterpriseOwnerId)
+                        filters.enterpriseId = authStore.profile?.enterpriseOwnerId || ''
+                    } else if (authStore.isGerant) {
+                        // Gérant: enterpriseId is their own uid
                         filters.enterpriseId = authStore.user.uid
                     } else if (authStore.userRole === 'expert') {
                         filters.expertId = authStore.user.uid
@@ -119,6 +123,50 @@ export const useMissionsStore = defineStore('missions', {
             } catch (err) {
                 this.error = err instanceof Error ? err.message : 'Erreur lors du chargement des missions'
                 console.error('Error fetching missions by project:', err)
+            } finally {
+                this.loading = false
+            }
+        },
+
+        /**
+         * Fetch missions for multiple projects (for members)
+         */
+        async fetchMissionsForProjects(projectIds: string[]): Promise<void> {
+            this.loading = true
+            this.error = null
+
+            try {
+                // Fetch missions for each project
+                const missionPromises = projectIds.map(projectId => 
+                    getMissionsByProject(projectId)
+                )
+                const allMissions = await Promise.all(missionPromises)
+                const missions = allMissions.flat()
+
+                // Enhance missions with expert details
+                const enhancedMissions: MissionWithDetails[] = await Promise.all(
+                    missions.map(async (mission) => {
+                        const details: MissionWithDetails = { ...mission }
+
+                        if (mission.expertId) {
+                            try {
+                                const expert = await getUserProfile(mission.expertId)
+                                if (expert) {
+                                    details.expertName = `${expert.firstName} ${expert.lastName}`
+                                }
+                            } catch (e) {
+                                console.error(`Failed to fetch expert profile for ${mission.expertId}`, e)
+                            }
+                        }
+                        return details
+                    })
+                )
+
+                this.missions = enhancedMissions
+            } catch (e) {
+                console.error('Error fetching missions for projects:', e)
+                this.error = 'Erreur lors du chargement des missions'
+                this.missions = []
             } finally {
                 this.loading = false
             }

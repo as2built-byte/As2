@@ -23,6 +23,8 @@ export function useAuth() {
         isAdmin,
         isExpert,
         isEnterprise,
+        isGerant,
+        isMember,
     } = storeToRefs(authStore)
 
     // Return state and actions
@@ -41,6 +43,8 @@ export function useAuth() {
         isAdmin,
         isExpert,
         isEnterprise,
+        isGerant,
+        isMember,
 
         // Actions
         initAuthListener: authStore.initAuthListener,

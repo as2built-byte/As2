@@ -5,7 +5,7 @@
  * Allows experts to:
  * - Update personal information (firstName, lastName, phone)
  * - Upload/replace CV (PDF only)
- * - Toggle availability status
+ * - View profile information
  */
 
 import { onMounted } from 'vue'
@@ -21,7 +21,6 @@ const {
     firstName,
     lastName,
     phone,
-    availability,
     cvFile,
     currentCvUrl,
     
@@ -259,50 +258,8 @@ function formatPhoneDisplay(phoneValue: string): string {
                 </div>
             </div>
 
-            <!-- Availability Section -->
-            <div class="bg-white rounded-2xl border border-slate-200 p-6 mb-6">
-                <div class="flex items-center gap-3 mb-6 pb-4 border-b border-slate-200">
-                    <div class="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
-                        <Icon name="heroicons:calendar" class="w-5 h-5 text-emerald-600" />
-                    </div>
-                    <h2 class="text-lg font-semibold text-slate-800">Disponibilité</h2>
-                </div>
-
-                <div class="flex items-center justify-between p-4 bg-slate-50 rounded-lg">
-                    <div class="flex items-start gap-3">
-                        <Icon 
-                            :name="availability ? 'heroicons:check-circle' : 'heroicons:x-circle'" 
-                            :class="availability ? 'text-emerald-600' : 'text-slate-400'"
-                            class="w-6 h-6 flex-shrink-0 mt-0.5"
-                        />
-                        <div>
-                            <p class="font-medium text-slate-800">
-                                {{ availability ? 'Disponible pour de nouvelles missions' : 'Non disponible' }}
-                            </p>
-                            <p class="text-sm text-slate-500 mt-1">
-                                {{ availability 
-                                    ? 'Les entreprises peuvent vous contacter pour des missions' 
-                                    : 'Votre profil ne sera pas visible dans le pool d\'experts' 
-                                }}
-                            </p>
-                        </div>
-                    </div>
-                    <label class="relative inline-flex items-center cursor-pointer">
-                        <input 
-                            v-model="availability"
-                            type="checkbox"
-                            class="sr-only peer"
-                        />
-                        <div class="w-14 h-7 bg-slate-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-emerald-600"></div>
-                    </label>
-                </div>
-            </div>
-
             <!-- Actions -->
-            <div class="flex items-center justify-between">
-                <p class="text-sm text-slate-500">
-                    <span class="text-red-500">*</span> Champs obligatoires
-                </p>
+            <div class="flex items-center justify-end">
                 <button 
                     type="button"
                     class="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"

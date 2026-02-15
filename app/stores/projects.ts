@@ -7,6 +7,7 @@ import { defineStore } from 'pinia'
 import type { Project, CreateProjectData, UpdateProjectData, EnterpriseProfile } from '~/types'
 import {
     getProjectsByEnterprise,
+    getProjectsByMember,
     getProject,
     createProject,
     updateProject,
@@ -175,6 +176,25 @@ export const useProjectsStore = defineStore('projects', {
                 this.error = err instanceof Error ? err.message : 'Erreur lors de la demande d\'abonnement'
                 console.error('Error requesting subscription:', err)
                 return false
+            } finally {
+                this.loading = false
+            }
+        },
+
+        /**
+         * Fetch projects assigned to a member
+         */
+        async fetchMemberProjects(memberId: string): Promise<void> {
+            this.loading = true
+            this.error = null
+
+            try {
+                this.projects = await getProjectsByMember(memberId)
+                // Members cannot create projects
+                this.canCreateMore = false
+            } catch (err) {
+                this.error = err instanceof Error ? err.message : 'Erreur lors du chargement des projets'
+                console.error('Error fetching member projects:', err)
             } finally {
                 this.loading = false
             }

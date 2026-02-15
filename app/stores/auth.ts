@@ -57,6 +57,12 @@ export const useAuthStore = defineStore('auth', {
         /** Check if user is an enterprise */
         isEnterprise: (state): boolean => state.profile?.role === 'enterprise',
 
+        /** Check if user is an enterprise owner (gérant) - enterprise without enterpriseOwnerId */
+        isGerant: (state): boolean => state.profile?.role === 'enterprise' && !state.profile?.enterpriseOwnerId,
+
+        /** Check if user is an enterprise member (project manager) - enterprise with enterpriseOwnerId */
+        isMember: (state): boolean => state.profile?.role === 'enterprise' && !!state.profile?.enterpriseOwnerId,
+
         /** Get full name from firstName and lastName */
         fullName: (state): string => {
             if (!state.profile) return ''

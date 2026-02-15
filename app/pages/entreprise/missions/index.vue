@@ -17,7 +17,7 @@ definePageMeta({
     middleware: ['auth']
 })
 
-const { user } = useAuth()
+const { user, isMember, profile } = useAuth()
 const missionsStore = useMissionsStore()
 const projectsStore = useProjectsStore()
 
@@ -29,25 +29,29 @@ const completingMission = ref<string | null>(null)
 const deletingMission = ref<string | null>(null)
 const cancellingExpert = ref<string | null>(null)
 
-// Fetch missions and projects when user is available
-onMounted(async () => {
-    if (user.value?.uid) {
-        await Promise.all([
-            missionsStore.fetchMissionsByEnterprise(user.value.uid),
-            projectsStore.fetchProjects(user.value.uid)
-        ])
-    }
-})
+// Load data based on role
+async function loadData() {
+    const uid = user.value?.uid
+    if (!uid) return
 
-// Watch for user changes
-watch(() => user.value?.uid, async (uid) => {
-    if (uid) {
+    if (isMember.value) {
+        // Member: load assigned projects, then missions for those projects
+        await projectsStore.fetchMemberProjects(uid)
+        if (projectsStore.projects.length > 0) {
+            const projectIds = projectsStore.projects.map(p => p.id)
+            await missionsStore.fetchMissionsForProjects(projectIds)
+        }
+    } else {
+        // Gérant: load all enterprise projects and missions
         await Promise.all([
-            missionsStore.fetchMissionsByEnterprise(uid),
-            projectsStore.fetchProjects(uid)
+            projectsStore.fetchProjects(uid),
+            missionsStore.fetchMissionsByEnterprise(uid)
         ])
     }
-})
+}
+
+onMounted(loadData)
+watch(() => user.value?.uid, loadData)
 
 // Handle mission completion
 async function handleCompleteMission(missionId: string) {
@@ -56,8 +60,8 @@ async function handleCompleteMission(missionId: string) {
     completingMission.value = missionId
     try {
         const success = await missionsStore.completeMission(missionId)
-        if (success && user.value?.uid) {
-            await missionsStore.fetchMissionsByEnterprise(user.value.uid)
+        if (success) {
+            await loadData()
         }
     } finally {
         completingMission.value = null

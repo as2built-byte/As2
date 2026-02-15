@@ -8,6 +8,7 @@ users
       - phone
       - createdAt
       - status: "active" |"pending"| "inactive"
+      - enterpriseOwnerId?: string // only for enterprise members (project managers), value = gérant's uid
 experts
   └── {uid}
       - certifications: [] // vide par defaut rempli apres completer des formation
@@ -119,6 +120,13 @@ submissions
       - description: string
       - status: "pending" | "approved" | "rejected"
       - createdAt: Timestamp
+
+project_members
+  └── {docId}
+      - projectId: string // reference au projet
+      - memberId: string // uid du membre (project manager)
+      - assignedAt: Timestamp
+      - assignedBy: string // uid du gérant qui a assigné
 
 notifications
   └── {notificationId}

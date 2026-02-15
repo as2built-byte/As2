@@ -7,6 +7,7 @@ import {
     deleteProblem,
     getUserProfile,
     getProject,
+    isUserAssignedToProject,
 } from '~/firebase/services/firestore'
 
 definePageMeta({
@@ -26,6 +27,7 @@ const error = ref<string | null>(null)
 const searchQuery = ref('')
 const severityFilter = ref<'all' | ProblemSeverity>('all')
 const projectEnterpriseId = ref<string>('')
+const isAssignedMember = ref(false)
 
 // Create form
 const showCreateForm = ref(false)
@@ -88,6 +90,9 @@ onMounted(async () => {
     try {
         const proj = await getProject(projectId.value)
         if (proj) projectEnterpriseId.value = proj.enterpriseId
+        if (user.value?.uid && profile.value?.enterpriseOwnerId) {
+            isAssignedMember.value = await isUserAssignedToProject(user.value.uid, projectId.value)
+        }
     } catch (e) { /* ignore */ }
     await loadProblems()
 })
@@ -113,7 +118,7 @@ function canEdit(problem: ProjectProblem): boolean {
 }
 
 function canDelete(problem: ProjectProblem): boolean {
-    return problem.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value
+    return problem.senderId === currentUserId.value || currentUserId.value === projectEnterpriseId.value || isAssignedMember.value
 }
 
 // Create problem

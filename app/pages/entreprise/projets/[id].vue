@@ -8,8 +8,15 @@
  * - Progress summary
  * - Quick actions
  */
+import type { UserProfile, ProjectMember } from '~/types'
 import { useProjectsStore } from '~/stores/projects'
 import { useMissionsStore } from '~/stores/missions'
+import { 
+    getMembersByEnterprise, 
+    getMembersByProject, 
+    assignMemberToProject, 
+    unassignMemberFromProject 
+} from '~/firebase/services/firestore'
 
 definePageMeta({
     layout: 'entreprise',
@@ -17,11 +24,59 @@ definePageMeta({
 })
 
 const route = useRoute()
-const { user } = useAuth()
+const { user, isGerant, profile } = useAuth()
 const projectsStore = useProjectsStore()
 const missionsStore = useMissionsStore()
 
 const projectId = computed(() => route.params.id as string)
+
+// Member assignment state
+const allMembers = ref<UserProfile[]>([])
+const assignedMembers = ref<ProjectMember[]>([])
+const loadingMembers = ref(false)
+const assigningMemberId = ref<string | null>(null)
+
+// Load members
+async function loadMembers() {
+    if (!user.value?.uid || !isGerant.value) return
+    loadingMembers.value = true
+    try {
+        const [members, assigned] = await Promise.all([
+            getMembersByEnterprise(user.value.uid),
+            getMembersByProject(projectId.value)
+        ])
+        allMembers.value = members.filter(m => m.status === 'active')
+        assignedMembers.value = assigned
+    } catch (err) {
+        console.error('Error loading members:', err)
+    } finally {
+        loadingMembers.value = false
+    }
+}
+
+// Toggle member assignment
+async function toggleMemberAssignment(member: UserProfile) {
+    const isAssigned = assignedMembers.value.some(a => a.memberId === member.uid)
+    assigningMemberId.value = member.uid
+    try {
+        if (isAssigned) {
+            await unassignMemberFromProject(projectId.value, member.uid)
+        } else {
+            await assignMemberToProject(projectId.value, member.uid, user.value!.uid)
+        }
+        await loadMembers()
+    } catch (err) {
+        console.error('Error toggling member assignment:', err)
+        alert('Erreur lors de l\'assignation du membre')
+    } finally {
+        assigningMemberId.value = null
+    }
+}
+
+// Check if member is assigned
+function isMemberAssigned(memberId: string): boolean {
+    return assignedMembers.value.some(a => a.memberId === memberId)
+}
 
 // Load data on mount, only after user is authenticated
 onMounted(async () => {
@@ -36,7 +91,8 @@ onMounted(async () => {
         try {
             await Promise.all([
                 projectsStore.fetchProject(id),
-                missionsStore.fetchMissionsByProject(id)
+                missionsStore.fetchMissionsByProject(id),
+                loadMembers()
             ])
         } catch (err) {
             console.error('Error loading project data:', err)
@@ -284,6 +340,86 @@ function handleGestion() {
                     <p class="text-xs text-slate-500 mt-2">
                         {{ missionsByStatus.completed.length }} mission(s) terminée(s) sur {{ missionsStore.missions.length }}
                     </p>
+                </div>
+            </div>
+            
+            <!-- Members Assignment Section (Gérant only) -->
+            <div v-if="profile?.role === 'enterprise' && !profile?.enterpriseOwnerId && !loadingMembers" class="bg-white rounded-xl border border-slate-200 shadow-sm mb-6">
+                <div class="px-6 py-5 border-b border-slate-200">
+                    <h2 class="text-xl font-bold text-slate-900">Membres assignés</h2>
+                    <p class="text-sm text-slate-600 mt-1">Gérez les chefs de projet qui peuvent accéder à ce projet</p>
+                </div>
+                
+                <div v-if="loadingMembers" class="p-12 text-center">
+                    <Icon name="heroicons:arrow-path" class="w-8 h-8 text-blue-600 animate-spin mx-auto mb-3" />
+                    <p class="text-slate-600">Chargement des membres...</p>
+                </div>
+                
+                <div v-else-if="allMembers.length === 0" class="p-12 text-center">
+                    <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <Icon name="heroicons:user-group" class="w-8 h-8 text-slate-400" />
+                    </div>
+                    <h3 class="text-lg font-semibold text-slate-900 mb-2">Aucun membre</h3>
+                    <p class="text-sm text-slate-600 mb-6">Créez des membres pour les assigner à ce projet.</p>
+                    <NuxtLink 
+                        to="/entreprise/membres/create"
+                        class="inline-flex items-center gap-2 px-5 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 shadow-sm"
+                    >
+                        <Icon name="heroicons:plus-circle" class="w-5 h-5" />
+                        Créer un membre
+                    </NuxtLink>
+                </div>
+                
+                <div v-else class="p-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <div
+                            v-for="member in allMembers"
+                            :key="member.uid"
+                            class="flex items-center gap-3 p-4 rounded-lg border transition-all"
+                            :class="isMemberAssigned(member.uid) 
+                                ? 'border-blue-200 bg-blue-50' 
+                                : 'border-slate-200 bg-white hover:border-slate-300'"
+                        >
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
+                                 :class="isMemberAssigned(member.uid) ? 'bg-blue-100' : 'bg-slate-100'">
+                                <Icon name="heroicons:user" class="w-5 h-5"
+                                      :class="isMemberAssigned(member.uid) ? 'text-blue-600' : 'text-slate-400'" />
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-semibold text-slate-800 truncate text-sm">
+                                    {{ member.firstName }} {{ member.lastName }}
+                                </p>
+                                <p class="text-xs text-slate-500 truncate">{{ member.email }}</p>
+                            </div>
+                            <button
+                                type="button"
+                                class="p-2 rounded-lg transition-colors flex-shrink-0"
+                                :class="isMemberAssigned(member.uid)
+                                    ? 'text-blue-600 hover:bg-blue-100'
+                                    : 'text-slate-400 hover:bg-slate-100'"
+                                :disabled="assigningMemberId === member.uid"
+                                :title="isMemberAssigned(member.uid) ? 'Retirer' : 'Assigner'"
+                                @click="toggleMemberAssignment(member)"
+                            >
+                                <Icon
+                                    :name="assigningMemberId === member.uid
+                                        ? 'heroicons:arrow-path'
+                                        : isMemberAssigned(member.uid)
+                                            ? 'heroicons:check-circle'
+                                            : 'heroicons:plus-circle'"
+                                    class="w-5 h-5"
+                                    :class="{ 'animate-spin': assigningMemberId === member.uid }"
+                                />
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div v-if="assignedMembers.length > 0" class="mt-4 pt-4 border-t border-slate-200">
+                        <p class="text-sm text-slate-600">
+                            <span class="font-semibold text-slate-900">{{ assignedMembers.length }}</span> 
+                            membre{{ assignedMembers.length > 1 ? 's' : '' }} assigné{{ assignedMembers.length > 1 ? 's' : '' }} à ce projet
+                        </p>
+                    </div>
                 </div>
             </div>
             

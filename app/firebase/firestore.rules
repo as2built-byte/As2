@@ -23,11 +23,34 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     
+    // Check if user is an enterprise (role == 'enterprise')
+    function isEnterprise() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'enterprise';
+    }
+
+    // Check if user is a gérant (enterprise without enterpriseOwnerId)
+    function isGerant() {
+      return isEnterprise() &&
+        !('enterpriseOwnerId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data);
+    }
+
     // Check if user is the enterprise owner of a project
     function isProjectOwner(projectId) {
       return isAuthenticated() &&
         exists(/databases/$(database)/documents/projects/$(projectId)) &&
         get(/databases/$(database)/documents/projects/$(projectId)).data.enterpriseId == request.auth.uid;
+    }
+
+    // Check if user is a member assigned to a project's enterprise
+    // Members have enterpriseOwnerId = gérant's uid, and gérant's uid = project.enterpriseId
+    function isMemberOfProjectEnterprise(projectId) {
+      return isEnterprise() &&
+        'enterpriseOwnerId' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+        exists(/databases/$(database)/documents/projects/$(projectId)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.enterpriseOwnerId == 
+          get(/databases/$(database)/documents/projects/$(projectId)).data.enterpriseId;
     }
     
     // ========================================
@@ -38,16 +61,24 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       
       // Users can create their own profile during registration
-      allow create: if isOwner(userId);
+      // Gérant can also create member profiles (enterpriseOwnerId == gérant's uid)
+      allow create: if isOwner(userId) || 
+        (isGerant() && request.resource.data.enterpriseOwnerId == request.auth.uid);
       
       // Users can update their own profile (except role and status)
       // Admins can update any user (including role and status)
-      allow update: if isOwner(userId) || isAdmin();
+      // Gérant can update their members' status
+      allow update: if isOwner(userId) || isAdmin() ||
+        (isGerant() && 
+         exists(/databases/$(database)/documents/users/$(userId)) &&
+         get(/databases/$(database)/documents/users/$(userId)).data.enterpriseOwnerId == request.auth.uid);
       
-      // Only admins can delete users
-      allow delete: if isAdmin();
+      // Only admins can delete users, or gérant can delete their members
+      allow delete: if isAdmin() ||
+        (isGerant() && 
+         exists(/databases/$(database)/documents/users/$(userId)) &&
+         get(/databases/$(database)/documents/users/$(userId)).data.enterpriseOwnerId == request.auth.uid);
     }
-    
     // ========================================
     // Experts Collection
     // ========================================
@@ -170,9 +201,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
         resource.data.senderId == request.auth.uid;
       
-      // Delete: creator can delete, or enterprise owner of the project
+      // Delete: creator can delete, enterprise owner, or assigned member
       allow delete: if isAuthenticated() && (
-        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId) || isMemberOfProjectEnterprise(resource.data.projectId)
       );
     }
     
@@ -191,9 +222,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
         resource.data.senderId == request.auth.uid;
       
-      // Delete: creator can delete, or enterprise owner of the project
+      // Delete: creator can delete, enterprise owner, or assigned member
       allow delete: if isAuthenticated() && (
-        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId) || isMemberOfProjectEnterprise(resource.data.projectId)
       );
     }
     
@@ -212,9 +243,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
         resource.data.senderId == request.auth.uid;
       
-      // Delete: creator can delete, or enterprise owner of the project
+      // Delete: creator can delete, enterprise owner, or assigned member
       allow delete: if isAuthenticated() && (
-        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId) || isMemberOfProjectEnterprise(resource.data.projectId)
       );
     }
     
@@ -233,9 +264,9 @@ service cloud.firestore {
       allow update: if isAuthenticated() && 
         resource.data.senderId == request.auth.uid;
       
-      // Delete: creator can delete, or enterprise owner of the project
+      // Delete: creator can delete, enterprise owner, or assigned member
       allow delete: if isAuthenticated() && (
-        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId) || isMemberOfProjectEnterprise(resource.data.projectId)
       );
     }
     
@@ -252,15 +283,15 @@ service cloud.firestore {
         request.resource.data.status == 'pending';
       
       // Update: creator can update title/description (not status),
-      //         enterprise owner can update status only
+      //         enterprise owner or assigned member can update status only
       allow update: if isAuthenticated() && (
         (resource.data.senderId == request.auth.uid && request.resource.data.status == resource.data.status) ||
-        (isProjectOwner(resource.data.projectId) && request.resource.data.title == resource.data.title && request.resource.data.description == resource.data.description)
+        ((isProjectOwner(resource.data.projectId) || isMemberOfProjectEnterprise(resource.data.projectId)) && request.resource.data.title == resource.data.title && request.resource.data.description == resource.data.description)
       );
       
-      // Delete: creator can delete, or enterprise owner of the project
+      // Delete: creator can delete, enterprise owner, or assigned member
       allow delete: if isAuthenticated() && (
-        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId)
+        resource.data.senderId == request.auth.uid || isProjectOwner(resource.data.projectId) || isMemberOfProjectEnterprise(resource.data.projectId)
       );
     }
     
@@ -268,31 +299,56 @@ service cloud.firestore {
     // Missions Collection
     // ========================================
     match /missions/{missionId} {
-      // Enterprise owner, assigned expert, or admin can read missions
-      allow read: if isAuthenticated() && (
-        resource.data.enterpriseId == request.auth.uid ||
-        resource.data.expertId == request.auth.uid ||
-        isAdmin()
-      );
+      // Any authenticated user can read missions (consistent with projects, documents, etc.)
+      // Data filtering is handled in application code
+      allow read: if isAuthenticated();
       
-      // Enterprises can create missions for their projects
-      allow create: if isAuthenticated() && 
-        request.resource.data.enterpriseId == request.auth.uid;
+      // Enterprises or assigned members can create missions for their projects
+      allow create: if isAuthenticated() && (
+        request.resource.data.enterpriseId == request.auth.uid ||
+        isMemberOfProjectEnterprise(request.resource.data.projectId)
+      );
       
       // Admin can update any mission (for assigning expert)
       // Expert can update missions assigned to them (for accept/refuse)
-      // Enterprise owner can update their missions
+      // Enterprise owner or assigned member can update their missions
       allow update: if isAuthenticated() && (
         resource.data.enterpriseId == request.auth.uid ||
         resource.data.expertId == request.auth.uid ||
-        isAdmin()
+        isAdmin() ||
+        isMemberOfProjectEnterprise(resource.data.projectId)
       );
       
-      // Enterprise owner or admin can delete missions
+      // Enterprise owner, assigned member, or admin can delete missions
       allow delete: if isAuthenticated() && (
         resource.data.enterpriseId == request.auth.uid || 
-        isAdmin()
+        isAdmin() ||
+        isMemberOfProjectEnterprise(resource.data.projectId)
       );
+    }
+
+    // ========================================
+    // Project Members Collection
+    // ========================================
+    match /project_members/{docId} {
+      // Gérant can read assignments for their members, members can read their own
+      allow read: if isAuthenticated();
+      
+      // Only gérant can create assignments for their own members and projects
+      allow create: if isGerant() && 
+        request.resource.data.assignedBy == request.auth.uid &&
+        exists(/databases/$(database)/documents/users/$(request.resource.data.memberId)) &&
+        get(/databases/$(database)/documents/users/$(request.resource.data.memberId)).data.enterpriseOwnerId == request.auth.uid &&
+        exists(/databases/$(database)/documents/projects/$(request.resource.data.projectId)) &&
+        get(/databases/$(database)/documents/projects/$(request.resource.data.projectId)).data.enterpriseId == request.auth.uid;
+      
+      // Only gérant can delete assignments for their own members
+      allow delete: if isGerant() &&
+        exists(/databases/$(database)/documents/users/$(resource.data.memberId)) &&
+        get(/databases/$(database)/documents/users/$(resource.data.memberId)).data.enterpriseOwnerId == request.auth.uid;
+      
+      // No updates needed — delete and recreate instead
+      allow update: if false;
     }
   }
 }

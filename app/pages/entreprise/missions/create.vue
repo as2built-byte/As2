@@ -14,7 +14,7 @@ definePageMeta({
 
 const route = useRoute()
 const router = useRouter()
-const { user } = useAuth()
+const { user, isMember, profile } = useAuth()
 const projectsStore = useProjectsStore()
 const missionsStore = useMissionsStore()
 
@@ -35,7 +35,11 @@ const error = ref<string | null>(null)
 // Fetch projects for dropdown
 onMounted(async () => {
     if (user.value?.uid) {
-        await projectsStore.fetchProjects(user.value.uid)
+        if (isMember.value) {
+            await projectsStore.fetchMemberProjects(user.value.uid)
+        } else {
+            await projectsStore.fetchProjects(user.value.uid)
+        }
     }
 })
 
@@ -61,9 +65,11 @@ async function handleSubmit() {
     error.value = null
     
     try {
+        // Use gérant's uid as enterpriseId (for members, it's enterpriseOwnerId)
+        const enterpriseId = profile.value?.enterpriseOwnerId || user.value.uid
         const missionId = await missionsStore.createMission(
             form.value.projectId,
-            user.value.uid,
+            enterpriseId,
             {
                 title: form.value.title.trim(),
                 description: form.value.description.trim()
@@ -99,13 +105,23 @@ async function handleSubmit() {
         <!-- No projects warning -->
         <div v-if="projectsStore.projects.length === 0 && !projectsStore.loading" class="bg-amber-50 border border-amber-200 rounded-xl p-6 text-center">
             <Icon name="heroicons:exclamation-triangle" class="w-8 h-8 text-amber-500 mx-auto mb-2" />
-            <p class="text-amber-700 mb-4">Vous devez d'abord créer un projet avant de pouvoir ajouter des missions.</p>
+            <p v-if="isMember" class="text-amber-700 mb-4">Aucun projet ne vous est assigné. Contactez votre gérant pour être assigné à un projet.</p>
+            <p v-else class="text-amber-700 mb-4">Vous devez d'abord créer un projet avant de pouvoir ajouter des missions.</p>
             <NuxtLink 
+                v-if="!isMember"
                 to="/entreprise/projets/create"
                 class="inline-flex items-center gap-2 px-4 py-2.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors"
             >
                 <Icon name="heroicons:plus" class="w-5 h-5" />
                 Créer un projet
+            </NuxtLink>
+            <NuxtLink 
+                v-else
+                to="/entreprise/projets"
+                class="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-500 text-white rounded-lg font-medium hover:bg-blue-600 transition-colors"
+            >
+                <Icon name="heroicons:folder-open" class="w-5 h-5" />
+                Mes projets
             </NuxtLink>
         </div>
         
