@@ -76,7 +76,7 @@ function closeDropdown() {
         >
             <div 
                 v-if="showDropdown" 
-                class="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50"
+                class="fixed inset-x-0 top-16 mx-2 sm:mx-0 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50"
             >
                 <!-- Header -->
                 <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
