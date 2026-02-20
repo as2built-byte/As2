@@ -47,36 +47,44 @@ function closeDropdown() {
 </script>
 
 <template>
-    <div class="relative">
-        <!-- Bell Button -->
-        <button 
-            type="button" 
-            class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
-            @click="showDropdown = !showDropdown"
+    <!-- Bell Button -->
+    <button 
+        type="button" 
+        class="relative p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+        @click="showDropdown = !showDropdown"
+    >
+        <Icon name="heroicons:bell" class="w-5 h-5" />
+        
+        <!-- Unread Badge -->
+        <span 
+            v-if="unreadCount > 0"
+            class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-xs font-bold text-white bg-red-500 rounded-full"
         >
-            <Icon name="heroicons:bell" class="w-5 h-5" />
-            
-            <!-- Unread Badge -->
-            <span 
-                v-if="unreadCount > 0"
-                class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center px-1 text-xs font-bold text-white bg-red-500 rounded-full"
-            >
-                {{ unreadCount > 9 ? '9+' : unreadCount }}
-            </span>
-        </button>
+            {{ unreadCount > 9 ? '9+' : unreadCount }}
+        </span>
+    </button>
+
+    <!-- Teleport dropdown to body to escape parent overflow/transform clipping -->
+    <Teleport to="body">
+        <!-- Overlay to close dropdown -->
+        <div 
+            v-if="showDropdown" 
+            class="fixed inset-0 z-[90]" 
+            @click="closeDropdown"
+        ></div>
 
         <!-- Dropdown Panel -->
         <Transition
             enter-active-class="transition ease-out duration-100"
-            enter-from-class="transform opacity-0 scale-95"
-            enter-to-class="transform opacity-100 scale-100"
+            enter-from-class="opacity-0 scale-95"
+            enter-to-class="opacity-100 scale-100"
             leave-active-class="transition ease-in duration-75"
-            leave-from-class="transform opacity-100 scale-100"
-            leave-to-class="transform opacity-0 scale-95"
+            leave-from-class="opacity-100 scale-100"
+            leave-to-class="opacity-0 scale-95"
         >
             <div 
                 v-if="showDropdown" 
-                class="fixed inset-x-0 top-16 mx-2 sm:mx-0 sm:absolute sm:inset-x-auto sm:top-auto sm:right-0 sm:mt-2 sm:w-80 bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden z-50"
+                class="fixed top-16 left-3 right-3 sm:left-auto sm:right-6 sm:w-80 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-[100]"
             >
                 <!-- Header -->
                 <div class="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
@@ -146,12 +154,5 @@ function closeDropdown() {
                 </div>
             </div>
         </Transition>
-    </div>
-
-    <!-- Overlay to close dropdown -->
-    <div 
-        v-if="showDropdown" 
-        class="fixed inset-0 z-40" 
-        @click="closeDropdown"
-    ></div>
+    </Teleport>
 </template>
