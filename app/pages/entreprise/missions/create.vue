@@ -30,7 +30,7 @@ const form = ref({
 
 // Local submission state
 const isSubmitting = ref(false)
-const error = ref<string | null>(null)
+const { error, errorRef, setError, clearError } = useFormError()
 
 // Fetch projects for dropdown
 onMounted(async () => {
@@ -49,20 +49,20 @@ async function handleSubmit() {
     
     // Validation
     if (!form.value.projectId) {
-        error.value = 'Veuillez sélectionner un projet'
+        setError('Veuillez sélectionner un projet')
         return
     }
     if (!form.value.title.trim()) {
-        error.value = 'Le titre est requis'
+        setError('Le titre est requis')
         return
     }
     if (!form.value.description.trim()) {
-        error.value = 'La description est requise'
+        setError('La description est requise')
         return
     }
     
     isSubmitting.value = true
-    error.value = null
+    clearError()
     
     try {
         // Use gérant's uid as enterpriseId (for members, it's enterpriseOwnerId)
@@ -90,7 +90,7 @@ async function handleSubmit() {
 <template>
     <div class="max-w-2xl mx-auto">
         <!-- Header -->
-        <div class="mb-8">
+        <div class="page-header">
             <NuxtLink 
                 :to="preselectedProjectId ? `/entreprise/projets/${preselectedProjectId}` : '/entreprise/missions'"
                 class="inline-flex items-center gap-2 text-slate-600 hover:text-slate-800 mb-4"
@@ -98,8 +98,8 @@ async function handleSubmit() {
                 <Icon name="heroicons:arrow-left" class="w-4 h-4" />
                 Retour
             </NuxtLink>
-            <h1 class="text-2xl font-bold text-slate-800">Créer une mission</h1>
-            <p class="text-slate-600 mt-1">Définissez une nouvelle mission pour votre projet.</p>
+            <h1 class="page-title">Créer une mission</h1>
+            <p class="page-subtitle">Définissez une nouvelle mission pour votre projet.</p>
         </div>
         
         <!-- No projects warning -->
@@ -128,7 +128,7 @@ async function handleSubmit() {
         <!-- Form -->
         <form v-else @submit.prevent="handleSubmit" class="bg-white rounded-xl border border-slate-200 p-6 space-y-6">
             <!-- Error -->
-            <div v-if="error" class="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+            <div ref="errorRef" v-if="error" class="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
                 <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
                 <p>{{ error }}</p>
             </div>

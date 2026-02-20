@@ -10,7 +10,14 @@ service firebase.storage {
     function isOwner(userId) {
       return isAuthenticated() && request.auth.uid == userId;
     }
+
+    // Check if user is admin via Firestore lookup
+    function isAdmin() {
+      return isAuthenticated() &&
+        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
     
+    // Expert CVs - owner can write/delete, authenticated can read
     match /experts/cv/{userId}/{filename} {
       allow write: if isOwner(userId)
                    && request.resource.size < 5 * 1024 * 1024
@@ -20,32 +27,41 @@ service firebase.storage {
     }
     
     // Project documents - PDF only, max 10MB
+    // Only the sender (uploader) or admin can delete
     match /projects/documents/{projectId}/{senderId}/{filename} {
       allow write: if isOwner(senderId)
                    && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('application/(x-)?pdf');
-      // Delete: any authenticated (enterprise owner check done in app + Firestore rules)
-      allow delete: if isAuthenticated();
+      allow delete: if isOwner(senderId) || isAdmin();
       allow read: if isAuthenticated();
     }
     
     // Project photos - images only, max 10MB
+    // Only the sender (uploader) or admin can delete
     match /projects/photos/{projectId}/{senderId}/{filename} {
       allow write: if isOwner(senderId)
                    && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
-      // Delete: any authenticated (enterprise owner check done in app + Firestore rules)
-      allow delete: if isAuthenticated();
+      allow delete: if isOwner(senderId) || isAdmin();
       allow read: if isAuthenticated();
     }
     
-    // Formation cover images - admin only
+    // Formation cover images - admin only write/delete, public read
     match /formations/covers/{formationId}/{filename} {
-      // Check if user is admin (requires Firestore lookup)
-      allow write: if isAuthenticated()
+      allow write: if isAdmin()
                    && request.resource.size < 5 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
-      allow read: if true; // Public read for cover images
+      allow delete: if isAdmin();
+      allow read: if true;
+    }
+    
+    // Audit reports - admin only write/delete, authenticated read
+    match /audits/reports/{auditId}/{filename} {
+      allow write: if isAdmin()
+                   && request.resource.size < 20 * 1024 * 1024
+                   && request.resource.contentType.matches('application/(x-)?pdf');
+      allow read: if isAuthenticated();
+      allow delete: if isAdmin();
     }
   }
 }

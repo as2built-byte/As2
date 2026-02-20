@@ -9,6 +9,7 @@ export type NotificationType =
     | 'new_registration'
     | 'certification_request'
     | 'subscription_request'
+    | 'audit_request'         // Enterprise requested a BIM maturity audit
     | 'new_mission'
     | 'mission_invitation'    // Expert invited to a mission
     | 'mission_accepted'      // Expert accepted a mission (notify enterprise)
@@ -25,7 +26,7 @@ export interface Notification {
         userId?: string
         userName?: string
         userRole?: 'expert' | 'enterprise'
-        itemType?: 'formation' | 'pack' | 'mission'
+        itemType?: 'formation' | 'pack' | 'mission' | 'audit'
         itemId?: string
         itemTitle?: string
         amount?: number
@@ -36,6 +37,8 @@ export interface Notification {
     targetUserId?: string
     /** Has the notification been read */
     read: boolean
+    /** UID of the user who created this notification */
+    createdBy: string
     createdAt: Date
 }
 
@@ -46,4 +49,5 @@ export interface CreateNotificationData {
     data: Notification['data']
     targetRole: NotificationTargetRole
     targetUserId?: string
+    createdBy?: string // Auto-set by createNotification if not provided
 }

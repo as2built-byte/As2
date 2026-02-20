@@ -243,7 +243,7 @@ const stats = computed(() => ({
         </div>
 
         <!-- Stats -->
-        <div v-if="!loading && problems.length > 0" class="grid grid-cols-3 gap-3 mb-5">
+        <div v-if="!loading && problems.length > 0" class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
             <div class="bg-white rounded-xl border border-slate-200 p-3 text-center">
                 <div class="flex items-center justify-center gap-1.5 mb-1">
                     <Icon name="heroicons:fire" class="w-4 h-4 text-red-500" />

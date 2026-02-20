@@ -133,6 +133,7 @@ export interface ProjectMember {
 export interface AuthState {
     user: { uid: string; email: string | null } | null
     profile: UserProfile | null
+    enterprise: any | null
     loading: boolean
     error: string | null
 }

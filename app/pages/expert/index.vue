@@ -195,9 +195,9 @@ function selectDay(day: typeof calendarDays.value[number]): void {
 </script>
 
 <template>
-    <div class="max-w-7xl mx-auto">
+    <div class="page-container">
         <!-- Loading -->
-        <div v-if="loading" class="flex items-center justify-center py-20">
+        <div v-if="loading" class="state-loading">
             <div class="spinner-lg text-blue-600"></div>
         </div>
 
@@ -209,9 +209,9 @@ function selectDay(day: typeof calendarDays.value[number]): void {
 
         <template v-else>
             <!-- Welcome -->
-            <div class="mb-8">
-                <h1 class="text-2xl font-bold text-slate-800">Tableau de bord</h1>
-                <p class="text-slate-500 mt-1">Vue d'ensemble de vos missions et projets</p>
+            <div class="page-header">
+                <h1 class="page-title">Tableau de bord</h1>
+                <p class="page-subtitle">Vue d'ensemble de vos missions et projets</p>
             </div>
 
             <!-- ============================== -->
@@ -329,7 +329,9 @@ function selectDay(day: typeof calendarDays.value[number]): void {
                         </div>
                     </div>
 
-                    <!-- Days of Week Header -->
+                    <!-- Days of Week Header + Calendar Grid (scrollable on mobile) -->
+                    <div class="overflow-x-auto">
+                    <div class="min-w-[640px]">
                     <div class="grid grid-cols-7 border-b border-slate-100">
                         <div
                             v-for="(day, i) in daysOfWeek"
@@ -399,6 +401,8 @@ function selectDay(day: typeof calendarDays.value[number]): void {
                                 </p>
                             </div>
                         </div>
+                    </div>
+                    </div>
                     </div>
 
                     <!-- Selected Day Detail Panel -->

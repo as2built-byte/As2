@@ -110,11 +110,11 @@ function getStatusConfig(status: string) {
 </script>
 
 <template>
-    <div class="max-w-6xl mx-auto">
+    <div class="page-container">
         <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-3xl font-bold text-slate-900 mb-2">Mes Missions BIM</h1>
-            <p class="text-slate-600">Gérez vos invitations et missions en cours</p>
+        <div class="page-header">
+            <h1 class="page-title">Mes Missions BIM</h1>
+            <p class="page-subtitle">Gérez vos invitations et missions en cours</p>
         </div>
         
         <!-- Tabs with counts -->
@@ -165,16 +165,16 @@ function getStatusConfig(status: string) {
             </div>
             
             <!-- Loading state -->
-            <div v-if="missionsStore.loading" class="p-12 text-center">
-                <Icon name="heroicons:arrow-path" class="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
-                <p class="text-slate-600">Chargement de vos missions...</p>
+            <div v-if="missionsStore.loading" class="state-loading">
+                <div class="spinner-lg text-blue-600"></div>
             </div>
             
             <!-- Error state -->
-            <div v-else-if="missionsStore.error" class="p-8 text-center">
-                <Icon name="heroicons:exclamation-circle" class="w-12 h-12 text-red-500 mx-auto mb-4" />
-                <h3 class="text-lg font-semibold text-red-900 mb-2">Erreur de chargement</h3>
-                <p class="text-red-700">{{ missionsStore.error }}</p>
+            <div v-else-if="missionsStore.error" class="p-8">
+                <div class="alert-error fade-in">
+                    <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <span>{{ missionsStore.error }}</span>
+                </div>
             </div>
             
             <!-- Empty state -->

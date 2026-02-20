@@ -7,7 +7,7 @@
 
 import { storeToRefs } from 'pinia'
 import { useAdminStore } from '~/stores/admin'
-import { getAllProjects, getAllMissionsForAdmin } from '~/firebase/services/firestore'
+import { getAllProjects, getAllMissionsForAdmin, getEnterpriseProfile } from '~/firebase/services/firestore'
 import type { Project, Mission } from '~/types'
 
 definePageMeta({
@@ -20,6 +20,7 @@ const error = ref<string | null>(null)
 const projects = ref<Project[]>([])
 const missions = ref<Mission[]>([])
 const searchQuery = ref('')
+const enterpriseNames = ref<Record<string, string>>({})
 const statusFilter = ref<'all' | 'active' | 'completed'>('all')
 
 // Fetch data
@@ -31,6 +32,22 @@ onMounted(async () => {
         ])
         projects.value = p
         missions.value = m
+
+        // Fetch enterprise names for all projects
+        const uniqueEnterpriseIds = [...new Set(p.map(proj => proj.enterpriseId))]
+        const profiles = await Promise.all(
+            uniqueEnterpriseIds.map(async (id) => {
+                try {
+                    const profile = await getEnterpriseProfile(id)
+                    return { id, name: profile?.companyName || 'Entreprise inconnue' }
+                } catch {
+                    return { id, name: 'Entreprise inconnue' }
+                }
+            })
+        )
+        const namesMap: Record<string, string> = {}
+        profiles.forEach(p => { namesMap[p.id] = p.name })
+        enterpriseNames.value = namesMap
     } catch (e) {
         console.error('Error loading projects:', e)
         error.value = 'Erreur lors du chargement des projets'
@@ -45,10 +62,12 @@ const filteredProjects = computed(() => {
         if (statusFilter.value !== 'all' && p.status !== statusFilter.value) return false
         if (searchQuery.value) {
             const q = searchQuery.value.toLowerCase()
+            const eName = (enterpriseNames.value[p.enterpriseId] || '').toLowerCase()
             return (
                 p.title.toLowerCase().includes(q) ||
                 p.address.toLowerCase().includes(q) ||
-                p.description.toLowerCase().includes(q)
+                p.description.toLowerCase().includes(q) ||
+                eName.includes(q)
             )
         }
         return true
@@ -82,11 +101,11 @@ function formatDate(date: Date): string {
 </script>
 
 <template>
-    <div class="max-w-7xl mx-auto">
+    <div class="page-container">
         <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-slate-800">Projets</h1>
-            <p class="text-slate-500 mt-1">Tous les projets de la plateforme</p>
+        <div class="page-header">
+            <h1 class="page-title">Projets</h1>
+            <p class="page-subtitle">Tous les projets de la plateforme</p>
         </div>
 
         <!-- Filters -->
@@ -131,7 +150,7 @@ function formatDate(date: Date): string {
         </div>
 
         <!-- Loading -->
-        <div v-if="loading" class="flex items-center justify-center py-20">
+        <div v-if="loading" class="state-loading">
             <div class="spinner-lg text-blue-600"></div>
         </div>
 
@@ -142,11 +161,13 @@ function formatDate(date: Date): string {
         </div>
 
         <!-- Empty -->
-        <div v-else-if="filteredProjects.length === 0" class="text-center py-16">
-            <Icon name="heroicons:folder-open" class="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p class="text-slate-500 font-medium">
+        <div v-else-if="filteredProjects.length === 0" class="state-empty">
+            <div class="state-empty-icon">
+                <Icon name="heroicons:folder-open" class="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 class="state-empty-title">
                 {{ searchQuery || statusFilter !== 'all' ? 'Aucun projet trouvé' : 'Aucun projet sur la plateforme' }}
-            </p>
+            </h3>
         </div>
 
         <!-- Projects List -->
@@ -168,6 +189,10 @@ function formatDate(date: Date): string {
                             >
                                 {{ statusLabel(project.status) }}
                             </span>
+                        </div>
+                        <div v-if="enterpriseNames[project.enterpriseId]" class="flex items-center gap-1.5 mb-1.5">
+                            <Icon name="heroicons:building-office-2" class="w-3.5 h-3.5 text-blue-500" />
+                            <span class="text-sm font-medium text-blue-600">{{ enterpriseNames[project.enterpriseId] }}</span>
                         </div>
                         <p class="text-sm text-slate-500 line-clamp-1 mb-2">{{ project.description }}</p>
                         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">

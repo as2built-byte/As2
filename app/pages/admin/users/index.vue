@@ -83,9 +83,9 @@ function getDisplayName(user: UserWithDetails): { primary: string; secondary?: s
 <template>
     <div>
         <!-- Page Header -->
-        <div class="mb-6">
-            <h1 class="text-2xl font-bold text-slate-800">Utilisateurs</h1>
-            <p class="text-slate-500 mt-1">Gérer les comptes experts et entreprises</p>
+        <div class="page-header">
+            <h1 class="page-title">Utilisateurs</h1>
+            <p class="page-subtitle">Gérer les comptes experts et entreprises</p>
         </div>
 
         <!-- Filters -->

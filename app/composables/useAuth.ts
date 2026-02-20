@@ -14,6 +14,7 @@ export function useAuth() {
     const {
         user,
         profile,
+        enterprise,
         loading,
         error,
         isAuthenticated,
@@ -32,6 +33,7 @@ export function useAuth() {
         // State (reactive)
         user,
         profile,
+        enterprise,
         loading,
         error,
 

@@ -3,6 +3,18 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: false },
 
+  // Runtime config - values come from NUXT_PUBLIC_* env variables
+  runtimeConfig: {
+    public: {
+      firebaseApiKey: '',
+      firebaseAuthDomain: '',
+      firebaseProjectId: '',
+      firebaseStorageBucket: '',
+      firebaseMessagingSenderId: '',
+      firebaseAppId: '',
+    }
+  },
+
   modules: [
     '@pinia/nuxt',
     '@nuxt/icon',

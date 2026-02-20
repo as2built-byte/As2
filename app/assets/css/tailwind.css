@@ -466,6 +466,94 @@
     @apply text-white bg-emerald-600 !important;
   }
 
+  /* ========================================
+       Page Layout Tokens - Uniform Structure
+       ======================================== */
+
+  .page-container {
+    @apply max-w-7xl mx-auto;
+  }
+
+  .page-header {
+    @apply mb-8;
+  }
+
+  .page-title {
+    @apply text-2xl font-bold text-slate-800;
+  }
+
+  .page-subtitle {
+    @apply text-slate-500 mt-1;
+  }
+
+  .section-title {
+    @apply text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4;
+  }
+
+  /* ========================================
+       Unified State Components
+       ======================================== */
+
+  .state-loading {
+    @apply flex items-center justify-center py-20;
+  }
+
+  .state-empty {
+    @apply bg-white rounded-xl border border-slate-200 p-12 text-center;
+  }
+
+  .state-empty-icon {
+    @apply w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4;
+  }
+
+  .state-empty-title {
+    @apply text-lg font-semibold text-slate-800 mb-2;
+  }
+
+  .state-empty-text {
+    @apply text-slate-500;
+  }
+
+  /* ========================================
+       KPI Card Tokens - Dashboard Stats
+       ======================================== */
+
+  .kpi-card {
+    @apply bg-white rounded-xl p-5 border border-slate-200 shadow-sm;
+  }
+
+  .kpi-icon {
+    @apply w-10 h-10 rounded-lg flex items-center justify-center;
+  }
+
+  .kpi-value {
+    @apply text-3xl font-bold text-slate-900;
+  }
+
+  .kpi-label {
+    @apply text-sm font-medium text-slate-500;
+  }
+
+  .kpi-sub {
+    @apply text-xs;
+  }
+
+  /* ========================================
+       Stats Card - Compact variant for lists
+       ======================================== */
+
+  .stat-card {
+    @apply bg-white rounded-xl p-4 border border-slate-200 shadow-sm;
+  }
+
+  .stat-value {
+    @apply text-2xl font-bold text-slate-900;
+  }
+
+  .stat-label {
+    @apply text-xs text-slate-500;
+  }
+
   /* Hidden scrollbar for sidebars */
   .sidebar-scroll {
     scrollbar-width: none;

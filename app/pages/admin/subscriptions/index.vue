@@ -64,29 +64,31 @@ function formatDate(date: Date): string {
 </script>
 
 <template>
-    <div class="max-w-5xl mx-auto">
+    <div class="page-container">
         <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-slate-800">Demandes d'abonnement</h1>
-            <p class="text-slate-600 mt-1">Approuvez les entreprises pour qu'elles puissent créer plus de projets</p>
+        <div class="page-header">
+            <h1 class="page-title">Demandes d'abonnement</h1>
+            <p class="page-subtitle">Approuvez les entreprises pour qu'elles puissent créer plus de projets</p>
         </div>
         
         <!-- Loading state -->
-        <div v-if="loading" class="flex justify-center py-12">
-            <Icon name="heroicons:arrow-path" class="w-8 h-8 text-blue-600 animate-spin" />
+        <div v-if="loading" class="state-loading">
+            <div class="spinner-lg text-blue-600"></div>
         </div>
         
         <!-- Error state -->
-        <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-            <Icon name="heroicons:exclamation-circle" class="w-8 h-8 text-red-500 mx-auto mb-2" />
-            <p class="text-red-700">{{ error }}</p>
+        <div v-else-if="error" class="alert-error fade-in">
+            <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span>{{ error }}</span>
         </div>
         
         <!-- Empty state -->
-        <div v-else-if="enterprises.length === 0" class="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <Icon name="heroicons:check-circle" class="w-16 h-16 text-emerald-300 mx-auto mb-4" />
-            <h3 class="text-lg font-semibold text-slate-800 mb-2">Aucune demande en attente</h3>
-            <p class="text-slate-600">Toutes les demandes d'abonnement ont été traitées.</p>
+        <div v-else-if="enterprises.length === 0" class="state-empty">
+            <div class="state-empty-icon bg-emerald-100">
+                <Icon name="heroicons:check-circle" class="w-8 h-8 text-emerald-500" />
+            </div>
+            <h3 class="state-empty-title">Aucune demande en attente</h3>
+            <p class="state-empty-text">Toutes les demandes d'abonnement ont été traitées.</p>
         </div>
         
         <!-- Enterprises list -->

@@ -46,7 +46,7 @@ const navigation = {
         { path: '/admin/projets', label: 'Projets', icon: 'heroicons:folder-open', disabled: false },
         { path: '/admin/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: false },
         { path: '/admin/formations', label: 'Formations', icon: 'heroicons:academic-cap', disabled: false },
-        { path: '/admin/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: true }
+        { path: '/admin/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: false }
     ],
     finance: [
         { path: '/admin/subscriptions', label: 'Abonnements', icon: 'heroicons:sparkles', disabled: false },

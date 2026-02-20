@@ -31,7 +31,7 @@ const password = ref('')
 const confirmPassword = ref('')
 
 const saving = ref(false)
-const error = ref<string | null>(null)
+const { error, errorRef, setError, clearError } = useFormError()
 const showPassword = ref(false)
 
 // Validation
@@ -50,7 +50,7 @@ async function handleSubmit() {
     if (!isValid.value || !user.value?.uid) return
 
     saving.value = true
-    error.value = null
+    clearError()
 
     try {
         await createMemberAccount(user.value.uid, {
@@ -65,11 +65,11 @@ async function handleSubmit() {
     } catch (e: unknown) {
         const err = e as { code?: string; message?: string }
         if (err.code === 'auth/email-already-in-use') {
-            error.value = 'Cette adresse email est déjà utilisée'
+            setError('Cette adresse email est déjà utilisée')
         } else if (err.message?.includes('téléphone')) {
-            error.value = err.message
+            setError(err.message)
         } else {
-            error.value = 'Erreur lors de la création du compte membre'
+            setError('Erreur lors de la création du compte membre')
         }
         console.error('Error creating member:', e)
     } finally {
@@ -81,7 +81,7 @@ async function handleSubmit() {
 <template>
     <div class="max-w-2xl mx-auto">
         <!-- Header -->
-        <div class="mb-8">
+        <div class="page-header">
             <NuxtLink
                 to="/entreprise/membres"
                 class="inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-700 mb-4"
@@ -89,15 +89,15 @@ async function handleSubmit() {
                 <Icon name="heroicons:arrow-left" class="w-4 h-4" />
                 Retour aux membres
             </NuxtLink>
-            <h1 class="text-2xl font-bold text-slate-800">Nouveau membre</h1>
-            <p class="text-slate-500 mt-1">Créez un compte pour un chef de projet</p>
+            <h1 class="page-title">Nouveau membre</h1>
+            <p class="page-subtitle">Créez un compte pour un chef de projet</p>
         </div>
 
         <!-- Error -->
-        <div v-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
+        <div ref="errorRef" v-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl flex items-start gap-3">
             <Icon name="heroicons:exclamation-circle" class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
             <p class="text-red-800">{{ error }}</p>
-            <button type="button" class="ml-auto text-red-600 hover:text-red-800" @click="error = null">
+            <button type="button" class="ml-auto text-red-600 hover:text-red-800" @click="clearError()">
                 <Icon name="heroicons:x-mark" class="w-5 h-5" />
             </button>
         </div>

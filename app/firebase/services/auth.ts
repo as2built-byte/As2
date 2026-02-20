@@ -106,9 +106,9 @@ export async function createUserWithoutSignIn(
 ): Promise<string> {
     const { initializeApp, deleteApp } = await import('firebase/app')
     const { getAuth, createUserWithEmailAndPassword } = await import('firebase/auth')
-    const { firebaseConfig } = await import('../config')
+    const { getFirebaseConfig } = await import('../config')
 
-    const secondaryApp = initializeApp(firebaseConfig, 'secondary-' + Date.now())
+    const secondaryApp = initializeApp(getFirebaseConfig(), 'secondary-' + Date.now())
     try {
         const secondaryAuth = getAuth(secondaryApp)
         const credential = await createUserWithEmailAndPassword(secondaryAuth, email, password)

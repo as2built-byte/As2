@@ -106,11 +106,11 @@ function formatDate(date: Date): string {
 <template>
     <div class="max-w-7xl mx-auto">
         <!-- Header with stats -->
-        <div class="mb-8">
+            <div class="page-header">
             <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
                 <div>
-                    <h1 class="text-3xl font-bold text-slate-900">Mes Projets</h1>
-                    <p class="text-slate-600 mt-2">Gérez et suivez vos projets de construction BIM</p>
+                    <h1 class="page-title">Mes Projets</h1>
+                    <p class="page-subtitle">Gérez et suivez vos projets de construction BIM</p>
                 </div>
                 
                 <!-- Create button or subscription CTA (gérant only) -->
@@ -152,47 +152,47 @@ function formatDate(date: Date): string {
             
             <!-- Quick stats -->
             <div v-if="!projectsStore.loading && projectsStore.projects.length > 0" class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <div class="bg-white rounded-lg border border-slate-200 p-4">
+                <div class="stat-card">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                        <div class="kpi-icon bg-blue-100">
                             <Icon name="heroicons:building-office-2" class="w-5 h-5 text-blue-600" />
                         </div>
                         <div>
-                            <p class="text-2xl font-bold text-slate-900">{{ projectsStore.projects.length }}</p>
-                            <p class="text-xs text-slate-500">Total projets</p>
+                            <p class="stat-value">{{ projectsStore.projects.length }}</p>
+                            <p class="stat-label">Total projets</p>
                         </div>
                     </div>
                 </div>
-                <div class="bg-white rounded-lg border border-slate-200 p-4">
+                <div class="stat-card">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center">
+                        <div class="kpi-icon bg-emerald-100">
                             <Icon name="heroicons:play-circle" class="w-5 h-5 text-emerald-600" />
                         </div>
                         <div>
-                            <p class="text-2xl font-bold text-slate-900">{{ projectsStore.projects.filter(p => p.status === 'active').length }}</p>
-                            <p class="text-xs text-slate-500">En cours</p>
+                            <p class="stat-value">{{ projectsStore.projects.filter(p => p.status === 'active').length }}</p>
+                            <p class="stat-label">En cours</p>
                         </div>
                     </div>
                 </div>
-                <div class="bg-white rounded-lg border border-slate-200 p-4">
+                <div class="stat-card">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                        <div class="kpi-icon bg-blue-100">
                             <Icon name="heroicons:check-circle" class="w-5 h-5 text-blue-600" />
                         </div>
                         <div>
-                            <p class="text-2xl font-bold text-slate-900">{{ projectsStore.projects.filter(p => p.status === 'completed').length }}</p>
-                            <p class="text-xs text-slate-500">Terminés</p>
+                            <p class="stat-value">{{ projectsStore.projects.filter(p => p.status === 'completed').length }}</p>
+                            <p class="stat-label">Terminés</p>
                         </div>
                     </div>
                 </div>
-                <div class="bg-white rounded-lg border border-slate-200 p-4">
+                <div class="stat-card">
                     <div class="flex items-center gap-3">
-                        <div class="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
+                        <div class="kpi-icon bg-purple-100">
                             <Icon name="heroicons:briefcase" class="w-5 h-5 text-purple-600" />
                         </div>
                         <div>
-                            <p class="text-2xl font-bold text-slate-900">{{ missionsStore.missions.filter(m => m.status === 'accepted').length }}</p>
-                            <p class="text-xs text-slate-500">Missions actives</p>
+                            <p class="stat-value">{{ missionsStore.missions.filter(m => m.status === 'accepted').length }}</p>
+                            <p class="stat-label">Missions actives</p>
                         </div>
                     </div>
                 </div>
@@ -200,16 +200,14 @@ function formatDate(date: Date): string {
         </div>
         
         <!-- Loading state -->
-        <div v-if="projectsStore.loading" class="flex flex-col items-center justify-center py-20">
-            <Icon name="heroicons:arrow-path" class="w-12 h-12 text-blue-600 animate-spin mb-4" />
-            <p class="text-slate-600">Chargement de vos projets...</p>
+        <div v-if="projectsStore.loading" class="state-loading">
+            <div class="spinner-lg text-blue-600"></div>
         </div>
         
         <!-- Error state -->
-        <div v-else-if="projectsStore.error" class="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-            <Icon name="heroicons:exclamation-circle" class="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <h3 class="text-lg font-semibold text-red-900 mb-2">Erreur de chargement</h3>
-            <p class="text-red-700">{{ projectsStore.error }}</p>
+        <div v-else-if="projectsStore.error" class="alert-error fade-in">
+            <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span>{{ projectsStore.error }}</span>
         </div>
         
         <!-- Empty state with onboarding -->

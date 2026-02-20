@@ -60,7 +60,11 @@ import type {
     CreateSubmissionData,
     SubmissionStatus,
     CreateMemberData,
-    ProjectMember
+    ProjectMember,
+    Audit,
+    CreateAuditData,
+    UpdateAuditData,
+    AuditWithDetails
 } from '~/types'
 
 let firestoreInstance: Firestore | null = null
@@ -96,6 +100,7 @@ export const COLLECTIONS = {
     RFIS: 'rfis',
     SUBMISSIONS: 'submissions',
     PROJECT_MEMBERS: 'project_members',
+    AUDITS: 'audits',
 } as const
 
 // ========================================
@@ -840,6 +845,7 @@ export async function requestSubscription(
         },
         targetRole: 'admin',
         read: false,
+        createdBy: enterpriseId,
         createdAt: serverTimestamp(),
     })
 
@@ -1924,17 +1930,155 @@ export async function deleteMember(memberId: string): Promise<void> {
     const assignmentsRef = collection(db, COLLECTIONS.PROJECT_MEMBERS)
     const q = query(assignmentsRef, where('memberId', '==', memberId))
     const querySnapshot = await getDocs(q)
-    
+
     // Delete all assignments
     const deletePromises = querySnapshot.docs.map(doc => deleteDoc(doc.ref))
     await Promise.all(deletePromises)
-    
+
     // Delete Firestore user document
     const userRef = doc(db, COLLECTIONS.USERS, memberId)
     await deleteDoc(userRef)
-    
+
     // Note: Firebase Auth user deletion requires Admin SDK
     // From client-side, we can only delete Firestore data
     // The Auth user will remain but cannot access without Firestore profile
     console.log('Member deleted from Firestore. Auth user cleanup requires Cloud Function with Admin SDK')
+}
+
+// ========================================
+// Audits Collection
+// ========================================
+
+/**
+ * Create a new audit request
+ */
+export async function createAudit(
+    requestedBy: string,
+    data: CreateAuditData
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const auditsRef = collection(db, COLLECTIONS.AUDITS)
+
+    const docRef = await addDoc(auditsRef, {
+        requestedBy,
+        status: 'pending',
+        formData: data.formData,
+        reportPdfUrl: null,
+        actionPlan: [],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
+
+    return docRef.id
+}
+
+/**
+ * Get all audits for an enterprise
+ */
+export async function getAuditsByEnterprise(enterpriseId: string): Promise<Audit[]> {
+    const db = getFirebaseFirestore()
+    const auditsRef = collection(db, COLLECTIONS.AUDITS)
+    const q = query(auditsRef, where('requestedBy', '==', enterpriseId))
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            requestedBy: data.requestedBy,
+            status: data.status,
+            formData: data.formData,
+            reportPdfUrl: data.reportPdfUrl || null,
+            bimProtocolUrl: data.bimProtocolUrl || null,
+            bimGuideUrl: data.bimGuideUrl || null,
+            actionPlan: data.actionPlan || [],
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Audit
+    })
+}
+
+/**
+ * Get a single audit by ID
+ */
+export async function getAudit(auditId: string): Promise<Audit | null> {
+    const db = getFirebaseFirestore()
+    const auditRef = doc(db, COLLECTIONS.AUDITS, auditId)
+    const auditSnap = await getDoc(auditRef)
+
+    if (!auditSnap.exists()) {
+        return null
+    }
+
+    const data = auditSnap.data()
+    return {
+        id: auditSnap.id,
+        requestedBy: data.requestedBy,
+        status: data.status,
+        formData: data.formData,
+        reportPdfUrl: data.reportPdfUrl || null,
+        bimProtocolUrl: data.bimProtocolUrl || null,
+        bimGuideUrl: data.bimGuideUrl || null,
+        actionPlan: data.actionPlan || [],
+        createdAt: data.createdAt?.toDate() || new Date(),
+        updatedAt: data.updatedAt?.toDate() || new Date(),
+    } as Audit
+}
+
+/**
+ * Get all audits (admin only)
+ */
+export async function getAllAudits(): Promise<AuditWithDetails[]> {
+    const db = getFirebaseFirestore()
+    const auditsRef = collection(db, COLLECTIONS.AUDITS)
+    const querySnapshot = await getDocs(auditsRef)
+
+    const audits: AuditWithDetails[] = await Promise.all(
+        querySnapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data()
+            const audit: AuditWithDetails = {
+                id: docSnap.id,
+                requestedBy: data.requestedBy,
+                status: data.status,
+                formData: data.formData,
+                reportPdfUrl: data.reportPdfUrl || null,
+                bimProtocolUrl: data.bimProtocolUrl || null,
+                bimGuideUrl: data.bimGuideUrl || null,
+                actionPlan: data.actionPlan || [],
+                createdAt: data.createdAt?.toDate() || new Date(),
+                updatedAt: data.updatedAt?.toDate() || new Date(),
+            }
+
+            // Fetch enterprise name
+            try {
+                const userProfile = await getUserProfile(data.requestedBy)
+                const enterpriseProfile = await getEnterpriseProfile(data.requestedBy)
+                if (userProfile && enterpriseProfile) {
+                    audit.enterpriseName = enterpriseProfile.companyName
+                }
+            } catch (e) {
+                console.error(`Failed to fetch enterprise for audit ${docSnap.id}`, e)
+            }
+
+            return audit
+        })
+    )
+
+    return audits
+}
+
+/**
+ * Update an audit (admin only)
+ */
+export async function updateAudit(
+    auditId: string,
+    data: UpdateAuditData
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const auditRef = doc(db, COLLECTIONS.AUDITS, auditId)
+
+    await updateDoc(auditRef, {
+        ...data,
+        updatedAt: serverTimestamp(),
+    } as DocumentData)
 }

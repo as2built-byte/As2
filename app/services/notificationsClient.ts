@@ -30,7 +30,7 @@ import type { Notification, CreateNotificationData } from '~/types/notification'
  * Create a new notification
  */
 export async function createNotification(data: CreateNotificationData): Promise<string> {
-    const { $firebaseFirestore } = useNuxtApp()
+    const { $firebaseFirestore, $firebaseAuth } = useNuxtApp()
     const db = $firebaseFirestore as Firestore
 
     const notificationsRef = collection(db, 'notifications')
@@ -38,6 +38,7 @@ export async function createNotification(data: CreateNotificationData): Promise<
     const docRef = await addDoc(notificationsRef, {
         ...data,
         read: false,
+        createdBy: data.createdBy || ($firebaseAuth as any)?.currentUser?.uid || '',
         createdAt: Timestamp.now()
     })
 

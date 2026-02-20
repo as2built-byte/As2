@@ -41,6 +41,7 @@ export const STORAGE_PATHS = {
     FORMATION_COVERS: 'formations/covers',
     PROJECT_DOCUMENTS: 'projects/documents',
     PROJECT_PHOTOS: 'projects/photos',
+    AUDIT_REPORTS: 'audits/reports',
 } as const
 
 // ========================================
@@ -334,5 +335,58 @@ export async function deleteProjectPhotoByUrl(imageUrl: string): Promise<void> {
         }
     } catch (error) {
         console.warn('Could not delete project photo:', error)
+    }
+}
+
+// ========================================
+// Audit Report Upload (PDF only, max 20MB)
+// ========================================
+
+/**
+ * Upload an audit report PDF (admin only)
+ * @param auditId Audit ID
+ * @param file PDF file to upload
+ * @returns Download URL of the uploaded file
+ */
+export async function uploadAuditReport(
+    auditId: string,
+    file: File
+): Promise<string> {
+    const storage = getFirebaseStorage()
+
+    const timestamp = Date.now()
+    const filename = `rapport_audit_${timestamp}.pdf`
+    const filePath = `${STORAGE_PATHS.AUDIT_REPORTS}/${auditId}/${filename}`
+
+    const storageRef = ref(storage, filePath)
+
+    const metadata: UploadMetadata = {
+        contentType: 'application/pdf',
+        customMetadata: {
+            auditId,
+            uploadedAt: new Date().toISOString(),
+        }
+    }
+
+    await uploadBytes(storageRef, file, metadata)
+    return getDownloadURL(storageRef)
+}
+
+/**
+ * Delete an audit report by URL
+ */
+export async function deleteAuditReportByUrl(reportUrl: string): Promise<void> {
+    if (!reportUrl) return
+
+    const storage = getFirebaseStorage()
+
+    try {
+        const urlPath = decodeURIComponent(reportUrl.split('/o/')[1]?.split('?')[0] || '')
+        if (urlPath) {
+            const fileRef = ref(storage, urlPath)
+            await deleteObject(fileRef)
+        }
+    } catch (error) {
+        console.warn('Could not delete audit report:', error)
     }
 }

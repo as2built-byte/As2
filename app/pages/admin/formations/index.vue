@@ -293,10 +293,10 @@ const packDiscount = computed(() => {
 <template>
     <div>
         <!-- Page Header -->
-        <div class="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div class="page-header flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Formations & Packs</h1>
-                <p class="text-slate-500 mt-1">Gérer les formations et les packs de certification</p>
+                <h1 class="page-title">Formations & Packs</h1>
+                <p class="page-subtitle">Gérer les formations et les packs de certification</p>
             </div>
             <button
                 type="button"
@@ -388,15 +388,13 @@ const packDiscount = computed(() => {
         </div>
 
         <!-- Error Alert -->
-        <div v-if="error" class="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
-            <div class="flex items-center gap-2">
-                <Icon name="heroicons:exclamation-circle" class="w-5 h-5" />
-                {{ error }}
-            </div>
+        <div v-if="error" class="alert-error fade-in mb-6">
+            <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span>{{ error }}</span>
         </div>
 
         <!-- Loading -->
-        <div v-if="formationsLoading || packsLoading" class="flex justify-center py-20">
+        <div v-if="formationsLoading || packsLoading" class="state-loading">
             <div class="spinner-lg text-blue-600"></div>
         </div>
 

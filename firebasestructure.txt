@@ -147,3 +147,38 @@ notifications
       - read: boolean // false par défaut
       - createdAt // Timestamp Firebase
 
+audits
+  └── {auditId}
+      - requestedBy: string // uid du gérant
+      - status: "pending" |"in_progress" | "completed" | "rejected"
+      - formData: {
+          sector: "promotion" | "bureau_etudes" | "construction" | "other"
+          employeeCount: number
+          projectsPerYear: "1" | "1_5" | "5_10" | "10_50" | "50_plus"
+          delays: "0" | "0_3" | "3_6" | "6_12" | "12_18" | "18_24" | "24_plus"
+          nonQualityCost: "0" | "0_2" | "2_5" | "5_10" | "10_20" | "20_plus"
+          technicalStaffCount: number
+          bimLevel: "0" | "1" | "2"
+          softwares: string[]
+          priority: ("cost" | "time" | "standards")[] // choix multiple
+      }
+      - reportPdfUrl: string | null
+      - bimProtocolUrl: string | null // Google Drive link - Protocoles BIM
+      - bimGuideUrl: string | null // Google Drive link - Guide BIM
+      - actionPlan: [] // voir structure ci-dessous
+      - createdAt
+      - updatedAt
+actionPlan: [
+  {
+    phase: "Mois 1-3",
+    title: "Analyse AS IS & Stratégie",
+    description: "...",
+    status: "completed" | "in_progress" | "upcoming"
+  },
+  {
+    phase: "Mois 4-8",
+    title: "Stage 1 SGBIM & Formation",
+    description: "...",
+    status: "in_progress"
+  }
+]

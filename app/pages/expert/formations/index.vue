@@ -104,11 +104,11 @@ onMounted(() => {
 </script>
 
 <template>
-    <div>
+    <div class="page-container">
         <!-- Header -->
-        <div class="mb-6">
-            <h2 class="text-2xl font-bold text-slate-800">Formations & Packs</h2>
-            <p class="mt-1 text-slate-500">Consultez le catalogue et suivez vos formations</p>
+        <div class="page-header">
+            <h1 class="page-title">Formations & Packs</h1>
+            <p class="page-subtitle">Consultez le catalogue et suivez vos formations</p>
         </div>
 
         <!-- Tabs -->
@@ -138,24 +138,23 @@ onMounted(() => {
         </div>
 
         <!-- Loading -->
-        <div v-if="loading" class="flex items-center justify-center py-12">
-            <div class="flex items-center gap-3 text-slate-500">
-                <Icon name="heroicons:arrow-path" class="w-5 h-5 animate-spin" />
-                Chargement des formations...
-            </div>
+        <div v-if="loading" class="state-loading">
+            <div class="spinner-lg text-blue-600"></div>
         </div>
 
         <!-- Error -->
-        <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-            <Icon name="heroicons:exclamation-circle" class="w-8 h-8 text-red-500 mx-auto mb-2" />
-            <p class="text-red-700">{{ error }}</p>
-            <button 
-                type="button"
-                class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
-                @click="loadData"
-            >
-                Réessayer
-            </button>
+        <div v-else-if="error" class="alert-error fade-in">
+            <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div class="flex-1">
+                <span>{{ error }}</span>
+                <button 
+                    type="button"
+                    class="ml-4 text-red-700 underline font-medium text-sm"
+                    @click="loadData"
+                >
+                    Réessayer
+                </button>
+            </div>
         </div>
 
         <!-- Content -->

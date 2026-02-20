@@ -85,11 +85,11 @@ function formatDate(date: Date): string {
 </script>
 
 <template>
-    <div class="max-w-7xl mx-auto">
+    <div class="page-container">
         <!-- Header -->
-        <div class="mb-8">
-            <h1 class="text-2xl font-bold text-slate-800">Mes Projets</h1>
-            <p class="text-slate-500 mt-1">Projets dans lesquels vous avez des missions acceptées</p>
+        <div class="page-header">
+            <h1 class="page-title">Mes Projets</h1>
+            <p class="page-subtitle">Projets dans lesquels vous avez des missions acceptées</p>
         </div>
 
         <!-- Filters -->
@@ -134,7 +134,7 @@ function formatDate(date: Date): string {
         </div>
 
         <!-- Loading -->
-        <div v-if="loading" class="flex items-center justify-center py-20">
+        <div v-if="loading" class="state-loading">
             <div class="spinner-lg text-blue-600"></div>
         </div>
 
@@ -145,12 +145,14 @@ function formatDate(date: Date): string {
         </div>
 
         <!-- Empty -->
-        <div v-else-if="filteredProjects.length === 0" class="text-center py-16">
-            <Icon name="heroicons:folder-open" class="w-12 h-12 text-slate-300 mx-auto mb-3" />
-            <p class="text-slate-500 font-medium mb-1">
+        <div v-else-if="filteredProjects.length === 0" class="state-empty">
+            <div class="state-empty-icon">
+                <Icon name="heroicons:folder-open" class="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 class="state-empty-title">
                 {{ searchQuery || statusFilter !== 'all' ? 'Aucun projet trouvé' : 'Aucun projet pour le moment' }}
-            </p>
-            <p v-if="!searchQuery && statusFilter === 'all'" class="text-sm text-slate-400">
+            </h3>
+            <p v-if="!searchQuery && statusFilter === 'all'" class="state-empty-text">
                 Acceptez des missions pour voir les projets associés ici
             </p>
         </div>

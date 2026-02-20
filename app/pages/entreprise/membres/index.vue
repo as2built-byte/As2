@@ -70,12 +70,12 @@ onMounted(loadMembers)
 </script>
 
 <template>
-    <div class="max-w-5xl mx-auto">
+    <div class="page-container">
         <!-- Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 page-header">
             <div>
-                <h1 class="text-2xl font-bold text-slate-800">Membres</h1>
-                <p class="text-slate-500 mt-1">Gérez les chefs de projet de votre entreprise</p>
+                <h1 class="page-title">Membres</h1>
+                <p class="page-subtitle">Gérez les chefs de projet de votre entreprise</p>
             </div>
             <NuxtLink
                 to="/entreprise/membres/create"
@@ -87,14 +87,14 @@ onMounted(loadMembers)
         </div>
 
         <!-- Loading -->
-        <div v-if="loading" class="flex items-center justify-center py-20">
-            <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+        <div v-if="loading" class="state-loading">
+            <div class="spinner-lg text-blue-600"></div>
         </div>
 
         <!-- Error -->
-        <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-            <Icon name="heroicons:exclamation-circle" class="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <p class="text-red-700">{{ error }}</p>
+        <div v-else-if="error" class="alert-error fade-in">
+            <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <span>{{ error }}</span>
         </div>
 
         <!-- Empty state -->

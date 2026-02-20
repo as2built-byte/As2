@@ -23,6 +23,7 @@ import {
     createUserProfile,
     createExpertProfile,
     createEnterpriseProfile,
+    getEnterpriseProfile,
     isPhoneRegistered
 } from '~/firebase/services/firestore'
 import { uploadExpertCV } from '~/firebase/services/storage'
@@ -31,6 +32,7 @@ export const useAuthStore = defineStore('auth', {
     state: (): AuthState => ({
         user: null,
         profile: null,
+        enterprise: null,
         loading: true,
         error: null,
     }),
@@ -105,9 +107,28 @@ export const useAuthStore = defineStore('auth', {
             try {
                 const profile = await getUserProfile(this.user.uid)
                 this.profile = profile
+
+                // If gérant, also fetch enterprise data
+                if (profile?.role === 'enterprise' && !profile.enterpriseOwnerId) {
+                    await this.fetchEnterprise()
+                }
             } catch (error) {
                 console.error('Error fetching profile:', error)
                 this.error = 'Erreur lors du chargement du profil'
+            }
+        },
+
+        /**
+         * Fetch enterprise data for gérant
+         */
+        async fetchEnterprise() {
+            if (!this.user?.uid) return
+
+            try {
+                const enterprise = await getEnterpriseProfile(this.user.uid)
+                this.enterprise = enterprise
+            } catch (error) {
+                console.error('Error fetching enterprise:', error)
             }
         },
 

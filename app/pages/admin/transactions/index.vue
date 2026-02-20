@@ -129,20 +129,22 @@ function getPrice(tx: TransactionDisplay): number | null {
 <template>
     <div>
         <!-- Header -->
-        <div class="mb-6">
-            <h1 class="text-2xl font-bold text-slate-800">Transactions</h1>
-            <p class="text-slate-500 mt-1">Liste de tous les paiements</p>
+        <div class="page-header">
+            <h1 class="page-title">Transactions</h1>
+            <p class="page-subtitle">Liste de tous les paiements</p>
         </div>
 
         <!-- Loading -->
-        <div v-if="loading" class="flex justify-center py-20">
+        <div v-if="loading" class="state-loading">
             <div class="spinner-lg text-blue-600"></div>
         </div>
 
         <!-- Empty state -->
-        <div v-else-if="transactions.length === 0" class="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <Icon name="heroicons:banknotes" class="w-16 h-16 text-slate-300 mx-auto" />
-            <p class="text-slate-500 mt-4 text-lg">Aucune transaction pour le moment</p>
+        <div v-else-if="transactions.length === 0" class="state-empty">
+            <div class="state-empty-icon">
+                <Icon name="heroicons:banknotes" class="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 class="state-empty-title">Aucune transaction pour le moment</h3>
         </div>
 
         <!-- Transactions table -->

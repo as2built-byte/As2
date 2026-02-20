@@ -268,7 +268,7 @@ function formatDate(date: Date): string {
 </script>
 
 <template>
-    <div class="max-w-5xl mx-auto">
+    <div class="page-container">
         <!-- Header -->
         <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
             <div class="flex items-center gap-3">
@@ -369,7 +369,7 @@ function formatDate(date: Date): string {
         </div>
 
         <!-- Loading -->
-        <div v-if="loading" class="flex items-center justify-center py-16">
+        <div v-if="loading" class="state-loading">
             <div class="spinner-lg text-blue-600"></div>
         </div>
 
@@ -380,12 +380,14 @@ function formatDate(date: Date): string {
         </div>
 
         <!-- Empty -->
-        <div v-else-if="filteredDocuments.length === 0" class="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <Icon name="heroicons:document-text" class="w-14 h-14 text-slate-300 mx-auto mb-3" />
-            <p class="text-slate-500 font-medium mb-1">
+        <div v-else-if="filteredDocuments.length === 0" class="state-empty">
+            <div class="state-empty-icon">
+                <Icon name="heroicons:document-text" class="w-8 h-8 text-slate-400" />
+            </div>
+            <h3 class="state-empty-title">
                 {{ searchQuery || typeFilter !== 'all' ? 'Aucun document trouvé' : 'Aucun document' }}
-            </p>
-            <p v-if="!searchQuery && typeFilter === 'all'" class="text-sm text-slate-400">
+            </h3>
+            <p v-if="!searchQuery && typeFilter === 'all'" class="state-empty-text">
                 Ajoutez votre premier document PDF
             </p>
         </div>

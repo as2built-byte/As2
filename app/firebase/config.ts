@@ -1,8 +1,8 @@
 /**
  * Firebase Configuration for As2Built
  * 
- * Environment-based configuration for Firebase services.
- * This file contains the Firebase project credentials.
+ * Configuration is loaded from Nuxt runtime config (environment variables).
+ * The config is set during plugin initialization and consumed by Firebase services.
  */
 
 export interface FirebaseConfig {
@@ -16,18 +16,28 @@ export interface FirebaseConfig {
 }
 
 /**
- * Firebase configuration object
- * 
- * TODO: Move to environment variables for production:
- * - NUXT_PUBLIC_FIREBASE_API_KEY
- * - NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN
- * - etc.
+ * Module-level config holder.
+ * Set once by the firebase.client.ts plugin at startup,
+ * then read by getFirebaseApp() and createUserWithoutSignIn().
  */
-export const firebaseConfig: FirebaseConfig = {
-    apiKey: 'AIzaSyCAC-0eoR5c09x-8wTby50HlwSuXJltoFQ',
-    authDomain: 'as2built-14cb6.firebaseapp.com',
-    projectId: 'as2built-14cb6',
-    storageBucket: 'as2built-14cb6.firebasestorage.app',
-    messagingSenderId: '433501108234',
-    appId: '1:433501108234:web:db20bbde80b8eda5e307f3',
+let _firebaseConfig: FirebaseConfig | null = null
+
+/**
+ * Set the Firebase config (called once by plugin).
+ */
+export function setFirebaseConfig(config: FirebaseConfig): void {
+    _firebaseConfig = config
+}
+
+/**
+ * Get the Firebase config.
+ * Throws if called before plugin initialization.
+ */
+export function getFirebaseConfig(): FirebaseConfig {
+    if (!_firebaseConfig) {
+        throw new Error(
+            '[Firebase] Config not initialized. Ensure the firebase.client.ts plugin has loaded.'
+        )
+    }
+    return _firebaseConfig
 }

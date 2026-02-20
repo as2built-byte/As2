@@ -173,12 +173,12 @@ function toggleExpand(missionId: string) {
 </script>
 
 <template>
-    <div class="max-w-7xl mx-auto">
+    <div class="page-container">
         <!-- Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 page-header">
             <div>
-                <h1 class="text-2xl font-bold text-slate-900">Gestion des Missions</h1>
-                <p class="text-sm text-slate-500 mt-1">Vision complète et contrôle de toutes les missions</p>
+                <h1 class="page-title">Gestion des Missions</h1>
+                <p class="page-subtitle">Vision complète et contrôle de toutes les missions</p>
             </div>
             <button
                 @click="refreshData"
@@ -256,27 +256,25 @@ function toggleExpand(missionId: string) {
         </div>
 
         <!-- Loading state -->
-        <div v-if="missionsStore.loading" class="flex flex-col items-center justify-center py-20">
-            <Icon name="heroicons:arrow-path" class="w-10 h-10 text-blue-600 animate-spin mb-3" />
-            <p class="text-slate-500 text-sm">Chargement des missions...</p>
+        <div v-if="missionsStore.loading" class="state-loading">
+            <div class="spinner-lg text-blue-600"></div>
         </div>
 
         <!-- Error state -->
-        <div v-else-if="missionsStore.error" class="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-            <Icon name="heroicons:exclamation-circle" class="w-10 h-10 text-red-500 mx-auto mb-3" />
-            <h3 class="text-lg font-semibold text-red-900 mb-2">Erreur de chargement</h3>
-            <p class="text-red-700 text-sm">{{ missionsStore.error }}</p>
-            <button @click="refreshData" class="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
-                Réessayer
-            </button>
+        <div v-else-if="missionsStore.error" class="alert-error fade-in">
+            <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div class="flex-1">
+                <span>{{ missionsStore.error }}</span>
+                <button @click="refreshData" class="ml-4 text-red-700 underline font-medium text-sm">Réessayer</button>
+            </div>
         </div>
 
         <!-- Empty state -->
-        <div v-else-if="filteredMissions.length === 0" class="bg-slate-50 rounded-xl border border-slate-200 p-12 text-center">
-            <div class="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+        <div v-else-if="filteredMissions.length === 0" class="state-empty">
+            <div class="state-empty-icon">
                 <Icon name="heroicons:inbox" class="w-8 h-8 text-slate-400" />
             </div>
-            <h3 class="text-lg font-semibold text-slate-700 mb-1">
+            <h3 class="state-empty-title">
                 {{ searchQuery ? 'Aucun résultat' : 'Aucune mission' }}
             </h3>
             <p class="text-sm text-slate-500">

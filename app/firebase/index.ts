@@ -6,7 +6,7 @@
  */
 
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
-import { firebaseConfig } from './config'
+import { getFirebaseConfig } from './config'
 
 let firebaseApp: FirebaseApp | null = null
 
@@ -26,12 +26,13 @@ export function getFirebaseApp(): FirebaseApp {
     }
 
     // Initialize new Firebase app
-    firebaseApp = initializeApp(firebaseConfig)
+    firebaseApp = initializeApp(getFirebaseConfig())
     return firebaseApp
 }
 
-// Re-export config for convenience
-export { firebaseConfig } from './config'
+// Re-export config utilities
+export { getFirebaseConfig, setFirebaseConfig } from './config'
+export type { FirebaseConfig } from './config'
 
 // Re-export all services
 export * from './services'
