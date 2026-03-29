@@ -1,44 +1,35 @@
-// https://nuxt.com/docs/api/configuration/nuxt-config
-export default defineNuxtConfig({
-  compatibilityDate: '2025-07-15',
-  devtools: { enabled: false },
+import { defineNuxtConfig } from 'nuxt/config'
 
-  // Runtime config - values come from NUXT_PUBLIC_* env variables
+export default defineNuxtConfig({
+  // Ajoute cette ligne précisément pour stopper les fallbacks
+  compatibilityDate: '2024-04-03',
+
+  // Configuration expérimentale
+  experimental: {
+    appManifest: false
+  },
+
+  // 1. On s'assure d'être en v3 standard pour la stabilité
+  // (Supprime ou commente toute référence à compatibilityVersion: 4)
+
+  // 2. Nitro preset for Vercel deployment
+  nitro: {
+    preset: 'vercel'
+  },
+
+  // 3. Tes modules et config habituels
+  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', 'nuxt-icon', '@nuxt/ui'],
+  
+  devtools: { enabled: true },
+
   runtimeConfig: {
     public: {
-      firebaseApiKey: '',
-      firebaseAuthDomain: '',
-      firebaseProjectId: '',
-      firebaseStorageBucket: '',
-      firebaseMessagingSenderId: '',
-      firebaseAppId: '',
+      firebaseApiKey: process.env.NUXT_PUBLIC_FIREBASE_API_KEY,
+      firebaseAuthDomain: process.env.NUXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+      firebaseProjectId: process.env.NUXT_PUBLIC_FIREBASE_PROJECT_ID,
+      firebaseStorageBucket: process.env.NUXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      firebaseMessagingSenderId: process.env.NUXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      firebaseAppId: process.env.NUXT_PUBLIC_FIREBASE_APP_ID,
     }
-  },
-
-  modules: [
-    '@pinia/nuxt',
-    '@nuxt/icon',
-    '@nuxtjs/tailwindcss',
-  ],
-
-  // Configure Icon module for better performance
-  icon: {
-    provider: 'server',
-    serverBundle: {
-      collections: ['heroicons'], // Only bundle heroicons that we use
-    },
-    clientBundle: {
-      scan: true, // Auto-detect icons used in your components
-      sizeLimitKb: 512, // Limit bundle size
-    }
-  },
-
-  // Configure Tailwind CSS
-  tailwindcss: {
-    cssPath: '~/assets/css/tailwind.css',
-    configPath: 'tailwind.config.js',
-  },
-
-  // Global CSS
-  css: ['~/assets/css/tailwind.css'],
+  }
 })

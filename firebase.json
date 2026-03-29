@@ -2,6 +2,21 @@
     "firestore": {
         "rules": "app/firebase/firestore.rules"
     },
+    "hosting": {
+        "site": "as2-54b34",
+        "public": "dist",
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "**/node_modules/**"
+        ],
+        "rewrites": [
+            {
+                "source": "**",
+                "destination": "/index.html"
+            }
+        ]
+    },
     "storage": {
         "rules": "app/firebase/storage.rules"
     }

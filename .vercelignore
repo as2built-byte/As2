@@ -1,0 +1,31 @@
+# Vercel Ignore File
+# These files/directories will not be uploaded to Vercel during deployment
+
+# Nuxt build output
+.nuxt
+
+# Dependencies
+node_modules
+
+# Environment variables (security)
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+
+# IDE
+.idea
+.vscode
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+
+# Temporary files
+*.tmp
+*.temp
