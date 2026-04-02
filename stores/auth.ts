@@ -126,9 +126,18 @@ export const useAuthStore = defineStore('auth', {
                 const profile = await getUserProfile(this.user.uid)
                 this.profile = profile
 
-                // If gérant, also fetch enterprise data
+                // If gérant, fetch own enterprise data
                 if (profile?.role === 'enterprise' && !profile.enterpriseOwnerId) {
                     await this.fetchEnterprise()
+                }
+                // If staff member, fetch gérant's enterprise data (to inherit the plan)
+                if (profile?.role === 'enterprise' && profile.enterpriseOwnerId) {
+                    try {
+                        const ownerEnterprise = await getEnterpriseProfile(profile.enterpriseOwnerId)
+                        this.enterprise = ownerEnterprise
+                    } catch (error) {
+                        console.error('Error fetching gérant enterprise for staff:', error)
+                    }
                 }
             } catch (error) {
                 console.error('Error fetching profile:', error)

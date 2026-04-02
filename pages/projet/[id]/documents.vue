@@ -17,7 +17,14 @@ import {
   updateEnterpriseStorage,
   recalculateEnterpriseStorage,
   checkoutDocument,
-  checkinDocument
+  checkinDocument,
+  getFoldersByProject,
+  createFolder,
+  renameFolder,
+  deleteFolder,
+  updateFolderPermissions,
+  moveFolderDocument,
+  type ProjectFolder
 } from '~/firebase/services/firestore'
 import { uploadProjectDocument, deleteProjectDocumentByUrl } from '~/firebase/services/storage'
 
@@ -126,6 +133,95 @@ const rfiTitle = ref('')
 const rfiQuestion = ref('')
 const submittingRFI = ref(false)
 
+// ─── Folder State ─────────────────────────────────────────────────────────────
+const folders = ref<ProjectFolder[]>([])
+const selectedFolderId = ref<string | null | 'all'>('all')
+const showCreateFolderModal = ref(false)
+const newFolderName = ref('')
+const newFolderParentId = ref<string | null>(null)
+const creatingFolder = ref(false)
+const renamingFolder = ref<ProjectFolder | null>(null)
+const renameValue = ref('')
+const uploadFolderId = ref<string | null>(null)
+
+// Folder permissions panel
+const showFolderPermissions = ref(false)
+const permissionsFolder = ref<ProjectFolder | null>(null)
+const folderMembers = ref<{ uid: string; name: string; email: string }[]>([])
+const localFolderPerms = ref<Record<string, 'view' | 'edit' | 'none'>>({})
+const savingPerms = ref(false)
+
+const isGerantUser = computed(() => profile.value?.role === 'enterprise' && !profile.value?.enterpriseOwnerId)
+const rootFolders = computed(() => folders.value.filter(f => !f.parentId))
+function getSubfolders(parentId: string) { return folders.value.filter(f => f.parentId === parentId) }
+function folderDocCount(folderId: string) { return documents.value.filter((d: any) => d.folderId === folderId).length }
+
+async function loadFolders() {
+  try { folders.value = await getFoldersByProject(projectId.value) } catch {}
+}
+
+async function handleCreateFolder() {
+  if (!newFolderName.value.trim() || !user.value?.uid) return
+  creatingFolder.value = true
+  try {
+    await createFolder(projectId.value, newFolderName.value.trim(), newFolderParentId.value, user.value.uid)
+    newFolderName.value = ''
+    showCreateFolderModal.value = false
+    await loadFolders()
+  } finally { creatingFolder.value = false }
+}
+
+async function handleRenameFolder() {
+  if (!renamingFolder.value || !renameValue.value.trim()) return
+  await renameFolder(renamingFolder.value.id, renameValue.value.trim())
+  renamingFolder.value = null
+  renameValue.value = ''
+  await loadFolders()
+}
+
+async function handleDeleteFolder(folder: ProjectFolder) {
+  if (!confirm(`Supprimer le dossier "${folder.name}" ? Les documents restent dans les documents généraux.`)) return
+  await deleteFolder(folder.id)
+  if (selectedFolderId.value === folder.id) selectedFolderId.value = 'all'
+  await loadFolders()
+}
+
+async function openFolderPermissions(folder: ProjectFolder) {
+  permissionsFolder.value = folder
+  localFolderPerms.value = { ...folder.permissions }
+  showFolderPermissions.value = true
+  // Load project members
+  try {
+    const { getMembersByProject, getUserProfile } = await import('~/firebase/services/firestore')
+    const members = await getMembersByProject(projectId.value)
+    folderMembers.value = await Promise.all(members.map(async m => {
+      const p = await getUserProfile(m.memberId).catch(() => null)
+      return { uid: m.memberId, name: p ? `${p.firstName} ${p.lastName}`.trim() : m.memberId, email: p?.email || '' }
+    }))
+    // Set default permission for each member
+    folderMembers.value.forEach(m => {
+      if (!localFolderPerms.value[m.uid]) localFolderPerms.value[m.uid] = 'view'
+    })
+  } catch {}
+}
+
+async function saveFolderPermissions() {
+  if (!permissionsFolder.value) return
+  savingPerms.value = true
+  try {
+    await updateFolderPermissions(permissionsFolder.value.id, localFolderPerms.value)
+    // Update local folder object
+    const f = folders.value.find(x => x.id === permissionsFolder.value!.id)
+    if (f) f.permissions = { ...localFolderPerms.value }
+    showFolderPermissions.value = false
+  } finally { savingPerms.value = false }
+}
+
+async function moveDocToFolder(docId: string, folderId: string | null) {
+  await moveFolderDocument(docId, folderId)
+  await loadDocuments()
+}
+
 /**
  * Validate filename against strict naming convention
  * Format: PROJET-ZONE-DISCIPLINE-TYPE-PHASE (e.g., RM3-25-GE-ARC-GN.pdf)
@@ -199,12 +295,18 @@ async function loadDocuments() {
 onMounted(() => {
   loadEnterprise()
   loadDocuments()
+  loadFolders()
 })
 
 // Filtered documents
 const filteredDocuments = computed(() => {
   let filtered = documents.value
-  
+
+  // Filter by selected folder
+  if (selectedFolderId.value !== 'all') {
+    filtered = filtered.filter((doc: any) => (doc.folderId ?? null) === selectedFolderId.value)
+  }
+
   if (searchQuery.value) {
     const query = searchQuery.value.toLowerCase()
     filtered = filtered.filter(doc => 
@@ -333,7 +435,8 @@ async function handleUpload() {
         fileSize: uploadFile.value.size,
         metadata,
       },
-      fileUrl
+      fileUrl,
+      uploadFolderId.value
     )
     console.log('✅ Document record created in Firestore with metadata:', metadata)
     
@@ -784,18 +887,119 @@ async function submitRFI() {
       <div class="flex items-center justify-between">
         <div>
           <h1 class="page-title">Documents</h1>
-          <p class="page-subtitle">Gerez les documents PDF du projet</p>
+          <p class="page-subtitle">
+            <template v-if="selectedFolderId === 'all'">Tous les documents du projet</template>
+            <template v-else>{{ folders.find(f => f.id === selectedFolderId)?.name || 'Dossier' }}</template>
+          </p>
         </div>
-        <button
-          v-if="canUpload"
-          @click="showUploadModal = true"
-          class="btn-primary flex items-center gap-2"
-        >
-          <Icon name="heroicons:cloud-arrow-up" class="w-5 h-5" />
-          Upload PDF
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            v-if="isGerantUser"
+            @click="showCreateFolderModal = true; newFolderParentId = selectedFolderId === 'all' ? null : selectedFolderId as string"
+            class="flex items-center gap-2 px-3 py-2 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+          >
+            <Icon name="heroicons:folder-plus" class="w-4 h-4" />
+            Nouveau dossier
+          </button>
+          <button
+            v-if="canUpload"
+            @click="showUploadModal = true; uploadFolderId = selectedFolderId === 'all' ? null : selectedFolderId as string"
+            class="btn-primary flex items-center gap-2"
+          >
+            <Icon name="heroicons:cloud-arrow-up" class="w-5 h-5" />
+            Upload PDF
+          </button>
+        </div>
       </div>
     </div>
+
+    <!-- Two-column layout: Folder tree + Documents -->
+    <div class="flex gap-4">
+
+    <!-- ─── LEFT: Folder Tree Panel ────────────────────────────────────── -->
+    <div class="w-60 shrink-0">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden sticky top-4">
+        <div class="px-3 py-2.5 border-b border-slate-100 flex items-center justify-between">
+          <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Dossiers</p>
+        </div>
+        <nav class="p-1.5 space-y-0.5">
+          <!-- All documents -->
+          <button
+            @click="selectedFolderId = 'all'"
+            class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors text-left"
+            :class="selectedFolderId === 'all' ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
+          >
+            <Icon name="heroicons:document-duplicate" class="w-4 h-4 shrink-0" />
+            <span class="flex-1 truncate">Tous les documents</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full" :class="selectedFolderId === 'all' ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'">
+              {{ documents.length }}
+            </span>
+          </button>
+
+          <!-- Root folders -->
+          <template v-for="folder in rootFolders" :key="folder.id">
+            <!-- Folder row -->
+            <div class="group relative">
+              <button
+                @click="selectedFolderId = folder.id"
+                class="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-sm font-medium transition-colors text-left"
+                :class="selectedFolderId === folder.id ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'"
+              >
+                <Icon name="heroicons:folder" class="w-4 h-4 shrink-0 text-amber-500" />
+                <span class="flex-1 truncate">{{ folder.name }}</span>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full" :class="selectedFolderId === folder.id ? 'bg-blue-100 text-blue-600' : 'bg-slate-100 text-slate-500'">
+                  {{ folderDocCount(folder.id) }}
+                </span>
+              </button>
+              <!-- Gérant actions (hover) -->
+              <div v-if="isGerantUser" class="absolute right-1 top-1 hidden group-hover:flex items-center gap-0.5 bg-white border border-slate-200 rounded-md shadow-sm">
+                <button @click.stop="openFolderPermissions(folder)" class="p-1 text-slate-400 hover:text-blue-600 rounded" title="Autorisations">
+                  <Icon name="heroicons:lock-closed" class="w-3 h-3" />
+                </button>
+                <button @click.stop="renamingFolder = folder; renameValue = folder.name" class="p-1 text-slate-400 hover:text-amber-600 rounded" title="Renommer">
+                  <Icon name="heroicons:pencil" class="w-3 h-3" />
+                </button>
+                <button @click.stop="handleDeleteFolder(folder)" class="p-1 text-slate-400 hover:text-red-600 rounded" title="Supprimer">
+                  <Icon name="heroicons:trash" class="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+            <!-- Sub-folders -->
+            <template v-for="sub in getSubfolders(folder.id)" :key="sub.id">
+              <div class="group relative">
+                <button
+                  @click="selectedFolderId = sub.id"
+                  class="w-full flex items-center gap-2 pl-7 pr-2.5 py-1.5 rounded-lg text-sm transition-colors text-left"
+                  :class="selectedFolderId === sub.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-500 hover:bg-slate-50'"
+                >
+                  <Icon name="heroicons:folder" class="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  <span class="flex-1 truncate">{{ sub.name }}</span>
+                  <span class="text-[10px] px-1 py-0.5 rounded-full bg-slate-100 text-slate-400">{{ folderDocCount(sub.id) }}</span>
+                </button>
+                <div v-if="isGerantUser" class="absolute right-1 top-0.5 hidden group-hover:flex items-center gap-0.5 bg-white border border-slate-200 rounded-md shadow-sm">
+                  <button @click.stop="openFolderPermissions(sub)" class="p-1 text-slate-400 hover:text-blue-600 rounded" title="Autorisations">
+                    <Icon name="heroicons:lock-closed" class="w-3 h-3" />
+                  </button>
+                  <button @click.stop="renamingFolder = sub; renameValue = sub.name" class="p-1 text-slate-400 hover:text-amber-600 rounded" title="Renommer">
+                    <Icon name="heroicons:pencil" class="w-3 h-3" />
+                  </button>
+                  <button @click.stop="handleDeleteFolder(sub)" class="p-1 text-slate-400 hover:text-red-600 rounded" title="Supprimer">
+                    <Icon name="heroicons:trash" class="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </template>
+          </template>
+          <!-- Empty state -->
+          <p v-if="!rootFolders.length" class="text-xs text-slate-400 text-center py-4 px-2">
+            {{ isGerantUser ? 'Cliquez sur « Nouveau dossier » pour commencer' : 'Aucun dossier' }}
+          </p>
+        </nav>
+      </div>
+    </div>
+
+    <!-- ─── RIGHT: Documents Content ────────────────────────────────────── -->
+    <div class="flex-1 min-w-0">
 
     <!-- Storage Limit Bar -->
     <StorageLimitBar
@@ -1057,6 +1261,21 @@ async function submitRFI() {
                 placeholder="Nom du document"
                 class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 placeholder-slate-400 focus:border-blue-500 focus:outline-none"
               />
+            </div>
+
+            <!-- Folder -->
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-2">Dossier de destination</label>
+              <select
+                v-model="uploadFolderId"
+                class="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-800 focus:border-blue-500 focus:outline-none"
+              >
+                <option :value="null">📂 Documents généraux (aucun dossier)</option>
+                <option v-for="f in rootFolders" :key="f.id" :value="f.id">📁 {{ f.name }}</option>
+                <template v-for="f in rootFolders" :key="f.id">
+                  <option v-for="sub in getSubfolders(f.id)" :key="sub.id" :value="sub.id">   📁 {{ sub.name }}</option>
+                </template>
+              </select>
             </div>
 
             <!-- Description -->
@@ -1477,6 +1696,115 @@ async function submitRFI() {
         </div>
       </div>
     </Teleport>
+
+    </div><!-- end right column -->
+    </div><!-- end two-column flex -->
+
+    <!-- ─── MODAL: Create Folder ──────────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="showCreateFolderModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @click.self="showCreateFolderModal = false">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-base font-bold text-slate-800">Nouveau dossier</h2>
+            <button @click="showCreateFolderModal = false" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+              <Icon name="heroicons:x-mark" class="w-4 h-4" />
+            </button>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1.5">Nom du dossier</label>
+              <input v-model="newFolderName" type="text" placeholder="ex: Plans d'exécution"
+                class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                @keyup.enter="handleCreateFolder" autofocus />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-slate-700 mb-1.5">Dossier parent</label>
+              <select v-model="newFolderParentId" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                <option :value="null">— Racine (aucun parent)</option>
+                <option v-for="f in rootFolders" :key="f.id" :value="f.id">📁 {{ f.name }}</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex gap-3 mt-6">
+            <button @click="showCreateFolderModal = false" class="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors">Annuler</button>
+            <button @click="handleCreateFolder" :disabled="!newFolderName.trim() || creatingFolder"
+              class="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+              <div v-if="creatingFolder" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              <Icon v-else name="heroicons:folder-plus" class="w-4 h-4" />
+              Créer
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ─── MODAL: Rename Folder ───────────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="renamingFolder" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @click.self="renamingFolder = null">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+          <h2 class="text-base font-bold text-slate-800 mb-4">Renommer le dossier</h2>
+          <input v-model="renameValue" type="text" class="w-full px-3 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+            @keyup.enter="handleRenameFolder" autofocus />
+          <div class="flex gap-3">
+            <button @click="renamingFolder = null" class="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50">Annuler</button>
+            <button @click="handleRenameFolder" :disabled="!renameValue.trim()"
+              class="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              Renommer
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ─── MODAL: Folder Permissions ─────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="showFolderPermissions && permissionsFolder" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @click.self="showFolderPermissions = false">
+        <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+          <div class="flex items-center justify-between mb-5">
+            <div>
+              <h2 class="text-base font-bold text-slate slate-800">Autorisations — 📁 {{ permissionsFolder.name }}</h2>
+              <p class="text-xs text-slate-500 mt-0.5">Définissez l'accès de chaque membre à ce dossier</p>
+            </div>
+            <button @click="showFolderPermissions = false" class="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
+              <Icon name="heroicons:x-mark" class="w-4 h-4" />
+            </button>
+          </div>
+          <div v-if="!folderMembers.length" class="text-center py-6 text-slate-400 text-sm">
+            Aucun membre dans ce projet
+          </div>
+          <div v-else class="space-y-2 max-h-72 overflow-y-auto">
+            <div v-for="m in folderMembers" :key="m.uid"
+              class="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-xs font-bold text-blue-700">
+                  {{ m.name.charAt(0).toUpperCase() }}
+                </div>
+                <div>
+                  <p class="text-sm font-medium text-slate-800">{{ m.name }}</p>
+                  <p class="text-xs text-slate-400">{{ m.email }}</p>
+                </div>
+              </div>
+              <select v-model="localFolderPerms[m.uid]"
+                class="px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                <option value="none">🚫 Aucun accès</option>
+                <option value="view">👁 Visualiser</option>
+                <option value="edit">✏️ Modifier</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex gap-3 mt-5">
+            <button @click="showFolderPermissions = false" class="flex-1 px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50">Annuler</button>
+            <button @click="saveFolderPermissions" :disabled="savingPerms"
+              class="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
+              <div v-if="savingPerms" class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+              <Icon v-else name="heroicons:check" class="w-4 h-4" />
+              Enregistrer
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
   </div>
 </template>
 

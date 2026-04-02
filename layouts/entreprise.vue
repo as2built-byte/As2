@@ -81,22 +81,25 @@ const navigation = computed(() => {
         ],
         profile: [
             { path: '/profile', label: 'Mon profil', icon: 'heroicons:user-circle', disabled: false },
-            { path: '/entreprise/abonnement', label: 'Abonnement', icon: 'heroicons:credit-card', disabled: false }
         ],
     }
 
-    // Only gérant can see Audits, Formations/Packs, and Membres sections
+    // Formations & Tutoriels: visible to ALL (gérant manages, staff views their own)
+    nav.training = [
+        { path: '/entreprise/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false },
+        { path: '/entreprise/tutorials', label: 'Tutoriels Vidéo', icon: 'heroicons:play-circle', disabled: false }
+    ]
+
+    // Audits and Membres: gérant only
     if (isGerant.value) {
         nav.audits = [
             { path: '/entreprise/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: false }
         ]
-        nav.training = [
-            { path: '/entreprise/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false },
-            { path: '/entreprise/tutorials', label: 'Tutoriels Vidéo', icon: 'heroicons:play-circle', disabled: false }
-        ]
         nav.membres = [
             { path: '/entreprise/membres', label: 'Membres', icon: 'heroicons:user-group', disabled: false }
         ]
+        // Abonnement: gérant only
+        nav.profile.push({ path: '/entreprise/abonnement', label: 'Abonnement', icon: 'heroicons:credit-card', disabled: false })
     }
 
     return nav
@@ -329,8 +332,8 @@ function closeUserMenu() {
                     </div>
                 </div>
 
-                <!-- Training Section (gérant only) -->
-                <div v-if="isGerant && navigation.training">
+                <!-- Training Section (all users) -->
+                <div v-if="navigation.training">
                     <div v-if="!sidebarCollapsed" class="px-3 pt-4 pb-3">
                         <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">FORMATIONS</p>
                     </div>

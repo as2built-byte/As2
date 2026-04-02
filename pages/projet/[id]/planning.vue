@@ -1762,7 +1762,7 @@ function closeExportDropdown() {
                 <button
                     type="button"
                     class="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-300 hover:text-white hover:bg-blue-800 rounded-lg transition-colors"
-                    @click="$router.push(`/projet/${projectId}`)"
+                    @click="$router.push(`/projet/${projectId}/dashboard`)"
                 >
                     <Icon name="heroicons:arrow-left" class="w-5 h-5 flex-shrink-0" />
                     <span>Retour</span>

@@ -355,6 +355,32 @@ service cloud.firestore {
     }
 
     // ========================================
+    // Reports Collection (Rapports de chantier)
+    // ========================================
+    match /reports/{reportId} {
+      // Any authenticated user can read reports
+      allow read: if isAuthenticated();
+
+      // Authenticated user can create a report linked to their uid
+      allow create: if isAuthenticated() &&
+        request.resource.data.createdBy == request.auth.uid;
+
+      // Creator, project owner or enterprise member can update
+      allow update: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        isProjectOwner(resource.data.projectId) ||
+        isMemberOfProjectEnterprise(resource.data.projectId)
+      );
+
+      // Creator, project owner or enterprise member can delete
+      allow delete: if isAuthenticated() && (
+        resource.data.createdBy == request.auth.uid ||
+        isProjectOwner(resource.data.projectId) ||
+        isMemberOfProjectEnterprise(resource.data.projectId)
+      );
+    }
+
+    // ========================================
     // Audits Collection
     // ========================================
     match /audits/{auditId} {

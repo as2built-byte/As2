@@ -216,7 +216,7 @@ const progress = computed(() => {
 
 // Navigate to project management workspace
 function handleGestion() {
-    navigateTo(`/projet/${projectId.value}/documents`)
+    navigateTo(`/projet/${projectId.value}/dashboard`)
 }
 </script>
 

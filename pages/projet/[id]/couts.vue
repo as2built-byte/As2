@@ -39,7 +39,7 @@ const auth = useAuth()
 const router = useRouter()
 
 function goBackToProject() {
-    router.push(`/projet/${projectId.value}`)
+    router.push(`/projet/${projectId.value}/dashboard`)
 }
 const activeTab = ref('dashboard')
 

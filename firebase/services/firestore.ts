@@ -130,6 +130,7 @@ export const COLLECTIONS = {
     DOCUMENT_VERSIONS: 'document_versions',
     NOTIFICATIONS: 'notifications',
     RFI_COMMENTS: 'rfi_comments',
+    PROJECT_FOLDERS: 'project_folders',
 } as const
 
 // ========================================
@@ -1785,7 +1786,8 @@ export async function createDocument(
     projectId: string,
     senderId: string,
     data: CreateDocumentData,
-    fileUrl: string
+    fileUrl: string,
+    folderId?: string | null
 ): Promise<string> {
     const db = getFirebaseFirestore()
     const docsRef = collection(db, COLLECTIONS.DOCUMENTS)
@@ -1800,6 +1802,7 @@ export async function createDocument(
         description: data.description || null,
         fileSize: data.fileSize || null,
         metadata: data.metadata || null,
+        folderId: folderId ?? null,
         createdAt: serverTimestamp(),
     })
 
@@ -3075,13 +3078,18 @@ export async function getMembersByProject(projectId: string): Promise<ProjectMem
 
     return querySnapshot.docs.map(docSnap => {
         const data = docSnap.data()
-        return {
+        const member: any = {
             id: docSnap.id,
             projectId: data.projectId,
             memberId: data.memberId,
             assignedAt: data.assignedAt?.toDate() || new Date(),
             assignedBy: data.assignedBy,
-        } as ProjectMember
+        }
+        // Preserve saved access map set by gérant in Membres page
+        if (data.access) {
+            member.access = data.access
+        }
+        return member as ProjectMember
     })
 }
 
@@ -4057,6 +4065,77 @@ export async function getDocumentVersions(documentId: string): Promise<DocumentV
             createdAt: data.createdAt?.toDate() || new Date(),
         } as DocumentVersion
     })
+}
+
+// ========================================
+// Project Folders
+// ========================================
+
+export interface ProjectFolder {
+    id: string
+    projectId: string
+    name: string
+    parentId: string | null
+    permissions: Record<string, 'view' | 'edit' | 'none'>
+    createdBy: string
+    createdAt: Date
+}
+
+export async function createFolder(
+    projectId: string,
+    name: string,
+    parentId: string | null,
+    createdBy: string
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const ref = await addDoc(collection(db, COLLECTIONS.PROJECT_FOLDERS), {
+        projectId,
+        name,
+        parentId,
+        permissions: {},
+        createdBy,
+        createdAt: serverTimestamp(),
+    })
+    return ref.id
+}
+
+export async function getFoldersByProject(projectId: string): Promise<ProjectFolder[]> {
+    const db = getFirebaseFirestore()
+    const snap = await getDocs(
+        query(collection(db, COLLECTIONS.PROJECT_FOLDERS), where('projectId', '==', projectId))
+    )
+    return snap.docs.map(d => ({
+        id: d.id,
+        projectId: d.data().projectId,
+        name: d.data().name,
+        parentId: d.data().parentId ?? null,
+        permissions: d.data().permissions || {},
+        createdBy: d.data().createdBy,
+        createdAt: d.data().createdAt?.toDate() || new Date(),
+    }))
+}
+
+export async function renameFolder(folderId: string, name: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    await updateDoc(doc(db, COLLECTIONS.PROJECT_FOLDERS, folderId), { name })
+}
+
+export async function deleteFolder(folderId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    await deleteDoc(doc(db, COLLECTIONS.PROJECT_FOLDERS, folderId))
+}
+
+export async function updateFolderPermissions(
+    folderId: string,
+    permissions: Record<string, 'view' | 'edit' | 'none'>
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    await updateDoc(doc(db, COLLECTIONS.PROJECT_FOLDERS, folderId), { permissions })
+}
+
+export async function moveFolderDocument(documentId: string, folderId: string | null): Promise<void> {
+    const db = getFirebaseFirestore()
+    await updateDoc(doc(db, COLLECTIONS.DOCUMENTS, documentId), { folderId: folderId ?? null })
 }
 
 /**

@@ -8,13 +8,17 @@
  * - No default layout inheritance
  */
 
-import { getProject, getEnterpriseProfile } from '~/firebase/services/firestore'
+import { getProject, getEnterpriseProfile, getFirebaseFirestore } from '~/firebase/services/firestore'
+import { collection, query, where, getDocs } from 'firebase/firestore'
 import type { Project, EnterpriseProfile } from '~/types'
 import NotificationDropdown from '~/components/NotificationDropdown.vue'
 
 const route = useRoute()
 const router = useRouter()
-const { user, profile, enterprise: enterpriseData } = useAuth()
+const { user, profile, enterprise: enterpriseData, isMember } = useAuth()
+
+// Member section access map (loaded from project_members for staff)
+const memberAccess = ref<Record<string, boolean>>({})
 
 // Sidebar state
 const sidebarCollapsed = ref(false)
@@ -33,6 +37,26 @@ const projectId = computed(() => {
     return projetIndex >= 0 ? segments[projetIndex + 1] : null
 })
 
+// Load member access toggles from project_members collection
+async function loadMemberAccess(projectId: string) {
+    if (!user.value?.uid) return
+    try {
+        const db = getFirebaseFirestore()
+        const snap = await getDocs(
+            query(
+                collection(db, 'project_members'),
+                where('projectId', '==', projectId),
+                where('memberId', '==', user.value.uid)
+            )
+        )
+        if (!snap.empty) {
+            memberAccess.value = snap.docs[0].data().access || {}
+        }
+    } catch (e) {
+        console.error('Error loading member access:', e)
+    }
+}
+
 // Load project and enterprise data
 async function loadProjectData(id: string) {
     if (!id) return
@@ -43,6 +67,8 @@ async function loadProjectData(id: string) {
         if (p?.enterpriseId) {
             enterpriseProfile.value = await getEnterpriseProfile(p.enterpriseId)
         }
+        // Load member access toggles (for staff; harmless no-op for gérant)
+        await loadMemberAccess(id)
     } catch (err) {
         console.error('Error loading project data:', err)
     } finally {
@@ -73,10 +99,12 @@ const navigationSections = [
   {
     title: 'PROJET',
     items: [
-      { path: 'documents', label: 'Documents', icon: 'heroicons:document-text' },
-      { path: 'photos', label: 'Photos', icon: 'heroicons:camera' },
-      { path: 'problemes', label: 'Problèmes', icon: 'heroicons:exclamation-triangle' },
-      { path: 'rfis', label: 'RFIs', icon: 'heroicons:chat-bubble-left-right' }
+      { path: 'dashboard',  label: 'Tableau de Bord', icon: 'heroicons:home' },
+      { path: 'documents',  label: 'Documents',       icon: 'heroicons:document-text' },
+      { path: 'photos',     label: 'Photos',          icon: 'heroicons:camera' },
+      { path: 'problemes',  label: 'Problèmes',       icon: 'heroicons:exclamation-triangle' },
+      { path: 'rfis',       label: 'RFIs',            icon: 'heroicons:chat-bubble-left-right' },
+      { path: 'membres',    label: 'Membres',         icon: 'heroicons:users' },
     ]
   },
   {
@@ -84,7 +112,7 @@ const navigationSections = [
     items: [
       { path: 'planning', label: 'Chronogramme', icon: 'heroicons:calendar-days', requiredPlan: 'bronze' },
       { path: 'couts', label: 'Coûts', icon: 'heroicons:banknotes', requiredPlan: 'silver' },
-      { path: 'rapports', label: 'Rapports', icon: 'heroicons:document-text', requiredPlan: 'bronze' }
+      { path: 'rapports', label: 'Rapports', icon: 'heroicons:clipboard-document-list', requiredPlan: 'bronze' }
     ]
   }
 ]
@@ -117,24 +145,18 @@ const currentPlan = computed(() => {
 
 // Check if user can access navigation item
 function canAccessNavItem(item: any): boolean {
-  if (!item.requiredPlan) return true // No restriction
-  
+  if (!item.requiredPlan) return true // No restriction on this item
+
+  // Staff members: use the section access toggles set by the gérant in Membres page
+  if (isMember.value) {
+    return memberAccess.value[item.path] === true
+  }
+
+  // Gérant / admin / expert: use plan-based check
   const planOrder = ['free', 'bronze', 'silver', 'gold']
   const currentPlanIndex = planOrder.indexOf(currentPlan.value)
   const requiredPlanIndex = planOrder.indexOf(item.requiredPlan)
-  
-  const canAccess = currentPlanIndex >= requiredPlanIndex
-  
-  console.log('🔍 Access check for', item.label, ':', {
-    role: profile.value?.role,
-    currentPlan: currentPlan.value,
-    currentPlanIndex,
-    requiredPlan: item.requiredPlan,
-    requiredPlanIndex,
-    canAccess
-  })
-  
-  return canAccess
+  return currentPlanIndex >= requiredPlanIndex
 }
 
 // Check if export is allowed (PDF/Excel)
@@ -173,13 +195,6 @@ function hasExportRestriction(): boolean {
 provide('canExport', canExport)
 provide('hasExportRestriction', hasExportRestriction)
 
-// Check if nav item is active
-function isActive(navPath: string): boolean {
-    const currentPath = route.path
-    const expectedPath = `/projet/${projectId.value}/${navPath}`
-    return currentPath === expectedPath || currentPath.includes(`/${navPath}`)
-}
-
 // Build full path for nav item
 function navTo(navPath: string): string {
     return `/projet/${projectId.value}/${navPath}`
@@ -211,61 +226,91 @@ watch(() => route.path, () => {
 const hideSidebar = computed(() => {
     return route.path.includes('/couts') || route.path.includes('/planning') || route.path.includes('/rapports')
 })
+
+// French label map for header breadcrumb
+const sectionLabels: Record<string, string> = {
+    dashboard:  'Tableau de Bord',
+    documents:  'Documents',
+    photos:     'Photos',
+    problemes:  'Problèmes',
+    rfis:       'RFIs',
+    membres:    'Membres',
+    planning:   'Chronogramme',
+    couts:      'Coûts',
+    rapports:   'Rapports',
+}
+
+function currentSectionLabel(): string {
+    const seg = route.path.split('/').at(-1) || ''
+    return sectionLabels[seg] || seg
+}
+
+// Active check also handles exact dashboard path
+function isActivePath(navPath: string): boolean {
+    const currentPath = route.path
+    if (navPath === 'dashboard') return currentPath === `/projet/${projectId.value}/dashboard` || currentPath === `/projet/${projectId.value}`
+    return currentPath === `/projet/${projectId.value}/${navPath}` || currentPath.includes(`/${navPath}`)
+}
 </script>
 
 <template>
-    <div class="min-h-screen bg-slate-100">
+    <div class="min-h-screen bg-slate-50">
         <!-- Mobile sidebar overlay -->
         <Transition name="fade">
             <div
                 v-if="mobileSidebarOpen && !hideSidebar"
-                class="fixed inset-0 z-40 bg-black/50 lg:hidden"
+                class="fixed inset-0 z-40 bg-black/60 lg:hidden"
                 @click="mobileSidebarOpen = false"
             />
         </Transition>
 
-        <!-- Sidebar -->
+        <!-- ─── SIDEBAR ──────────────────────────────────────────────── -->
         <aside
             v-if="!hideSidebar"
-            class="fixed inset-y-0 left-0 z-50 flex flex-col bg-slate-900 transition-all duration-300"
+            class="fixed inset-y-0 left-0 z-50 flex flex-col bg-blue-900 transition-all duration-300"
             :class="[
                 sidebarCollapsed ? 'w-20' : 'w-64',
                 mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
             ]"
         >
             <!-- Logo -->
-            <div class="h-16 flex items-center justify-between px-4 border-b border-slate-700">
-                <div class="flex items-center gap-3">
-                    <img
-                        src="/images/logo.jpeg"
-                        alt="As2Built"
-                        class="w-10 h-10 rounded-lg object-cover flex-shrink-0"
-                    />
-                    <span v-if="!sidebarCollapsed" class="text-white font-bold text-lg">As2Built</span>
+            <div class="h-16 flex items-center justify-between px-4 border-b border-blue-800 shrink-0">
+                <div class="flex items-center gap-3 min-w-0">
+                    <img src="/images/logo.jpeg" alt="As2Built" class="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                    <span v-if="!sidebarCollapsed" class="text-white font-bold text-lg truncate">As2Built</span>
                 </div>
                 <button
                     v-if="!sidebarCollapsed"
                     type="button"
-                    class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg"
+                    class="p-1.5 text-blue-400 hover:text-white hover:bg-blue-800 rounded-lg flex-shrink-0"
                     @click="sidebarCollapsed = true"
+                    title="Réduire"
                 >
-                    <Icon name="heroicons:chevron-left" class="w-5 h-5" />
+                    <Icon name="heroicons:chevron-left" class="w-4 h-4" />
                 </button>
                 <button
                     v-else
                     type="button"
-                    class="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg mx-auto"
+                    class="p-1.5 text-blue-400 hover:text-white hover:bg-blue-800 rounded-lg mx-auto"
                     @click="sidebarCollapsed = false"
+                    title="Agrandir"
                 >
-                    <Icon name="heroicons:chevron-right" class="w-5 h-5" />
+                    <Icon name="heroicons:chevron-right" class="w-4 h-4" />
                 </button>
             </div>
 
+            <!-- Project name pill (when expanded) -->
+            <div v-if="!sidebarCollapsed && !loading && project" class="px-4 py-3 border-b border-blue-800 shrink-0">
+                <p class="text-xs text-blue-400 font-medium uppercase tracking-wide mb-0.5">Projet</p>
+                <p class="text-white font-semibold text-sm truncate">{{ project.title }}</p>
+                <p class="text-blue-400 text-xs truncate">{{ enterpriseProfile?.companyName || '' }}</p>
+            </div>
+
             <!-- Back button -->
-            <div class="px-3 pt-4 pb-2">
+            <div class="px-3 pt-3 pb-1 shrink-0">
                 <button
                     type="button"
-                    class="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
+                    class="w-full flex items-center gap-3 px-3 py-2.5 text-sm text-blue-300 hover:text-white hover:bg-blue-800 rounded-lg transition-colors"
                     :title="sidebarCollapsed ? 'Retour' : undefined"
                     @click="goBack"
                 >
@@ -275,93 +320,103 @@ const hideSidebar = computed(() => {
             </div>
 
             <!-- Navigation -->
-            <nav class="flex-1 overflow-y-auto px-3 space-y-6">
+            <nav class="flex-1 overflow-y-auto px-3 pb-4">
                 <template v-for="section in navigationSections" :key="section.title">
                     <!-- Section title -->
-                    <div v-if="!sidebarCollapsed" class="px-3 pt-4 pb-2">
-                        <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">{{ section.title }}</p>
+                    <div v-if="!sidebarCollapsed" class="px-3 pt-5 pb-2">
+                        <p class="text-[10px] font-bold text-blue-400 uppercase tracking-widest">{{ section.title }}</p>
                     </div>
-                    
+                    <div v-else class="pt-4 pb-1 flex justify-center">
+                        <div class="w-6 border-t border-blue-700"></div>
+                    </div>
+
                     <!-- Section items -->
-                    <div class="space-y-1">
+                    <div class="space-y-0.5">
                         <template v-for="item in section.items" :key="item.path">
                             <!-- Accessible navigation item -->
                             <NuxtLink
                                 v-if="canAccessNavItem(item)"
                                 :to="navTo(item.path)"
-                                class="flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 group"
-                                :class="isActive(item.path)
-                                    ? 'bg-blue-600 text-white shadow-sm'
-                                    : 'text-slate-300 hover:text-white hover:bg-slate-700'"
+                                class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 group"
+                                :class="isActivePath(item.path)
+                                    ? 'bg-blue-600 text-white shadow-md'
+                                    : 'text-blue-200 hover:text-white hover:bg-blue-800'"
                                 :title="sidebarCollapsed ? item.label : undefined"
                             >
-                                <Icon :name="item.icon" class="w-5 h-5 mr-3 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
-                                <span v-if="!sidebarCollapsed" class="font-medium">{{ item.label }}</span>
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
+                                <span v-if="!sidebarCollapsed" class="truncate">{{ item.label }}</span>
+                                <!-- Active dot when collapsed -->
+                                <span v-if="sidebarCollapsed && isActivePath(item.path)"
+                                    class="absolute right-2 w-1.5 h-1.5 bg-white rounded-full"></span>
                             </NuxtLink>
-                            
+
                             <!-- Locked navigation item -->
                             <div
                                 v-else
                                 @click.prevent.stop="handleLockedClick"
-                                class="flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 group cursor-not-allowed opacity-50"
-                                :class="isActive(item.path)
-                                    ? 'bg-blue-600 text-white shadow-sm'
-                                    : 'text-slate-500'"
+                                class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg cursor-not-allowed opacity-40 text-blue-300"
                                 :title="sidebarCollapsed ? (item.label + ' 🔒') : undefined"
                             >
-                                <Icon :name="item.icon" class="w-5 h-5 mr-3 flex-shrink-0 transition-transform duration-200 group-hover:scale-110" />
-                                <span v-if="!sidebarCollapsed" class="font-medium">
+                                <Icon :name="item.icon" class="w-5 h-5 flex-shrink-0" />
+                                <span v-if="!sidebarCollapsed" class="truncate flex items-center gap-1.5">
                                     {{ item.label }}
-                                    <span class="ml-2">🔒</span>
+                                    <Icon name="heroicons:lock-closed" class="w-3 h-3" />
                                 </span>
                             </div>
                         </template>
                     </div>
                 </template>
             </nav>
+
+            <!-- Footer -->
+            <div v-if="!sidebarCollapsed" class="px-4 py-3 border-t border-blue-800 shrink-0">
+                <p class="text-[10px] text-blue-500 text-center">As2Built · Module Projet</p>
+            </div>
         </aside>
 
-        <!-- Main content area -->
+        <!-- ─── MAIN CONTENT ─────────────────────────────────────────── -->
         <div
-            class="transition-all duration-300"
+            class="transition-all duration-300 flex flex-col min-h-screen"
             :class="hideSidebar ? '' : (sidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64')"
         >
             <!-- Header -->
-            <header class="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm">
-                <!-- Mobile menu button -->
-                <button
-                    v-if="!hideSidebar"
-                    type="button"
-                    class="lg:hidden p-2 -ml-2 mr-3 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
-                    @click="mobileSidebarOpen = true"
-                >
-                    <Icon name="heroicons:bars-3" class="w-6 h-6" />
-                </button>
+            <header class="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm shrink-0">
+                <!-- Left: mobile menu + breadcrumb -->
+                <div class="flex items-center gap-3 min-w-0">
+                    <button
+                        v-if="!hideSidebar"
+                        type="button"
+                        class="lg:hidden p-2 -ml-2 mr-1 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+                        @click="mobileSidebarOpen = true"
+                    >
+                        <Icon name="heroicons:bars-3" class="w-6 h-6" />
+                    </button>
 
-                <!-- Project info -->
-                <div v-if="!loading && project" class="flex items-center gap-3 min-w-0">
-                    <div>
-                        <h1 class="text-lg font-semibold text-slate-800 truncate">{{ project.title }}</h1>
-                        <p class="text-sm text-slate-500 truncate">{{ enterpriseProfile?.companyName || 'Entreprise' }}</p>
-                    </div>
+                    <template v-if="!loading && project">
+                        <div class="flex items-center gap-2 min-w-0">
+                            <h1 class="text-base font-bold text-slate-800 truncate">{{ project.title }}</h1>
+                            <span class="hidden sm:inline text-slate-300">/</span>
+                            <span class="hidden sm:inline text-sm text-blue-600 font-medium truncate">
+                                {{ currentSectionLabel() }}
+                            </span>
+                        </div>
+                    </template>
+                    <template v-else>
+                        <div class="h-5 w-40 bg-slate-100 rounded animate-pulse"></div>
+                    </template>
                 </div>
 
-                <!-- Loading skeleton -->
-                <div v-else class="flex items-center gap-3 min-w-0">
-                    <div>
-                        <div class="h-4 w-32 bg-slate-100 rounded animate-pulse mb-1" />
-                        <div class="h-3 w-24 bg-slate-100 rounded animate-pulse" />
-                    </div>
-                </div>
-
-                <!-- Notifications -->
-                <div class="flex items-center gap-3">
+                <!-- Right: enterprise name + notifications -->
+                <div class="flex items-center gap-3 shrink-0">
+                    <span v-if="!loading && enterpriseProfile" class="hidden md:inline text-xs text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full">
+                        {{ enterpriseProfile.companyName }}
+                    </span>
                     <NotificationDropdown />
                 </div>
             </header>
 
             <!-- Page content -->
-            <main class="p-6">
+            <main class="flex-1 p-6">
                 <slot />
             </main>
         </div>
