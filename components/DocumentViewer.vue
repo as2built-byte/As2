@@ -114,10 +114,11 @@
 <script setup lang="ts">
 /**
  * Universal Document Viewer Component
+ * Updated: April 2026 - Using native iframe for PDFs
  * 
  * Handles different document types:
- * - PDF: Rendered in iframe
- * - Images: Rendered in iframe
+ * - PDF: Rendered in native iframe (no Google Docs)
+ * - Images: Rendered directly
  * - DWG/Revit/Navisworks: Shows download options with external viewer links
  */
 
