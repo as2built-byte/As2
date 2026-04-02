@@ -1667,7 +1667,7 @@ function addOfficialFooter(pdf: jsPDF, pageWidth: number, pageHeight: number, cu
     pdf.setFontSize(10)
     pdf.setTextColor(0, 51, 102)
     pdf.setFont('helvetica', 'bold')
-    pdf.text('Contact: 05 56514162 | | contact@as2built.com', margin, pageHeight - 15)
+    pdf.text('Contact: 05 56514162 | | info@as2built.com', margin, pageHeight - 15)
     
     // Pagination française
     pdf.setFontSize(9)
@@ -1717,7 +1717,7 @@ function addFooter(pdf: jsPDF, pageWidth: number, pageHeight: number, pageNumber
     pdf.setFontSize(8)
     pdf.setTextColor(100, 100, 100)
     pdf.text(`Page ${pageNumber}`, margin, pageHeight - 18)
-    pdf.text(`Document généré le ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} par contact@as2built.com`, pageWidth - 180, pageHeight - 18)
+    pdf.text(`Document généré le ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })} par info@as2built.com`, pageWidth - 180, pageHeight - 18)
     
     // Mention confidentielle
     pdf.setFontSize(9)

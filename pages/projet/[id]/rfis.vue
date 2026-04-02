@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProjectRFI, UserProfile } from '~/types'
+import type { ProjectRFI, UserProfile, ProjectMember } from '~/types'
 import {
     getRFIsByProject,
     createRFI,
@@ -8,6 +8,13 @@ import {
     getUserProfile,
     getProject,
     isUserAssignedToProject,
+    getMembersByProject,
+    getProjectMembers,
+    addRFIComment,
+    getRFIComments,
+    updateRFIComment,
+    deleteRFIComment,
+    type RFIComment,
 } from '~/firebase/services/firestore'
 
 definePageMeta({
@@ -27,24 +34,35 @@ const error = ref<string | null>(null)
 const searchQuery = ref('')
 const projectEnterpriseId = ref<string>('')
 const isAssignedMember = ref(false)
+const projectMembers = ref<Array<{ id: string; name: string; role?: string; email?: string }>>([])
 
 // Create form
 const showCreateForm = ref(false)
 const createTitle = ref('')
 const createQuestion = ref('')
+const createAssignedTo = ref('')
+const createDueDate = ref('')
 const creating = ref(false)
 
 // Edit state
 const editingRFI = ref<ProjectRFI | null>(null)
 const editTitle = ref('')
 const editQuestion = ref('')
+const editAssignedTo = ref('')
+const editDueDate = ref('')
 const saving = ref(false)
 
 // Delete state
 const deletingRFIId = ref<string | null>(null)
 
-// Expanded RFI (to show full question)
+// Expanded RFI (to show full question and comments)
 const expandedId = ref<string | null>(null)
+
+// Comments state
+const rfiComments = ref<Record<string, RFIComment[]>>({})
+const newCommentText = ref<Record<string, string>>({})
+const loadingComments = ref<Record<string, boolean>>({})
+const submittingComment = ref<Record<string, boolean>>({})
 
 // Sender profiles cache
 const senderProfiles = ref<Record<string, UserProfile>>({})
@@ -86,6 +104,19 @@ onMounted(async () => {
         if (user.value?.uid && profile.value?.enterpriseOwnerId) {
             isAssignedMember.value = await isUserAssignedToProject(user.value.uid, projectId.value)
         }
+        // Load project members for assignment
+        const members = await getMembersByProject(projectId.value)
+        projectMembers.value = await Promise.all(
+            members.map(async (m) => {
+                const profile = await getUserProfile(m.userId)
+                return {
+                    id: m.userId,
+                    name: profile ? `${profile.firstName} ${profile.lastName}` : m.userId,
+                    role: m.role,
+                    email: profile?.email
+                }
+            })
+        )
     } catch (e) { /* ignore */ }
     await loadRFIs()
 })
@@ -120,10 +151,14 @@ async function handleCreate() {
         await createRFI(projectId.value, currentUserId.value, {
             title: createTitle.value.trim(),
             question: createQuestion.value.trim(),
+            assignedTo: createAssignedTo.value || undefined,
+            dueDate: createDueDate.value ? new Date(createDueDate.value) : undefined,
         })
 
         createTitle.value = ''
         createQuestion.value = ''
+        createAssignedTo.value = ''
+        createDueDate.value = ''
         showCreateForm.value = false
 
         await loadRFIs()
@@ -140,6 +175,8 @@ function startEdit(rfi: ProjectRFI) {
     editingRFI.value = rfi
     editTitle.value = rfi.title
     editQuestion.value = rfi.question
+    editAssignedTo.value = rfi.assignedTo || ''
+    editDueDate.value = rfi.dueDate ? new Date(rfi.dueDate).toISOString().split('T')[0] : ''
 }
 
 // Save edit
@@ -150,6 +187,8 @@ async function saveEdit() {
         await updateRFI(editingRFI.value.id, {
             title: editTitle.value.trim(),
             question: editQuestion.value.trim(),
+            assignedTo: editAssignedTo.value || null,
+            dueDate: editDueDate.value ? new Date(editDueDate.value) : null,
         })
         editingRFI.value = null
         await loadRFIs()
@@ -177,7 +216,12 @@ async function handleDelete(rfi: ProjectRFI) {
 }
 
 function toggleExpand(id: string) {
+    const isExpanding = expandedId.value !== id
     expandedId.value = expandedId.value === id ? null : id
+    // Load comments when expanding
+    if (isExpanding && !rfiComments.value[id]) {
+        loadComments(id)
+    }
 }
 
 function getSenderName(senderId: string): string {
@@ -189,6 +233,17 @@ function getSenderRole(senderId: string): string {
     return senderProfiles.value[senderId]?.role || ''
 }
 
+function isOverdue(date: Date): boolean {
+    return new Date(date) < new Date()
+}
+
+function formatDateShort(date: Date): string {
+    return new Intl.DateTimeFormat('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+    }).format(new Date(date))
+}
+
 function formatDate(date: Date): string {
     return new Intl.DateTimeFormat('fr-FR', {
         day: 'numeric',
@@ -197,6 +252,98 @@ function formatDate(date: Date): string {
         hour: '2-digit',
         minute: '2-digit',
     }).format(date)
+}
+
+// Comments functions
+async function loadComments(rfiId: string) {
+    if (!rfiId) return
+    loadingComments.value[rfiId] = true
+    try {
+        const comments = await getRFIComments(rfiId)
+        rfiComments.value[rfiId] = comments
+        // Load sender profiles for comments
+        const senderIds = [...new Set(comments.map(c => c.senderId))]
+        for (const sid of senderIds) {
+            if (!senderProfiles.value[sid]) {
+                const p = await getUserProfile(sid)
+                if (p) senderProfiles.value[sid] = p
+            }
+        }
+    } catch (e) {
+        console.error('Error loading comments:', e)
+    } finally {
+        loadingComments.value[rfiId] = false
+    }
+}
+
+async function submitComment(rfiId: string) {
+    if (!newCommentText.value[rfiId]?.trim() || !currentUserId.value) return
+    
+    submittingComment.value[rfiId] = true
+    try {
+        await addRFIComment(rfiId, currentUserId.value, newCommentText.value[rfiId].trim())
+        newCommentText.value[rfiId] = ''
+        await loadComments(rfiId)
+    } catch (e) {
+        console.error('Error submitting comment:', e)
+        alert('Erreur lors de l\'envoi du commentaire')
+    } finally {
+        submittingComment.value[rfiId] = false
+    }
+}
+
+function getAssignedToName(userId: string): string {
+    const member = projectMembers.value.find(m => m.id === userId)
+    return member?.name || '—'
+}
+
+// ========================================
+// Comment Edit/Delete Functions
+// ========================================
+
+const editingComment = ref<string | null>(null)
+const editCommentText = ref<Record<string, string>>({})
+const updatingComment = ref<Record<string, boolean>>({})
+const deletingCommentId = ref<string | null>(null)
+
+function startEditComment(comment: RFIComment) {
+    editingComment.value = comment.id
+    editCommentText.value[comment.id] = comment.message
+}
+
+async function saveEditComment(rfiId: string, commentId: string) {
+    if (!editCommentText.value[commentId]?.trim() || !currentUserId.value) return
+    
+    updatingComment.value[commentId] = true
+    try {
+        await updateRFIComment(commentId, currentUserId.value, editCommentText.value[commentId].trim())
+        editingComment.value = null
+        await loadComments(rfiId)
+    } catch (e) {
+        console.error('Error updating comment:', e)
+        alert('Erreur lors de la modification du commentaire')
+    } finally {
+        updatingComment.value[commentId] = false
+    }
+}
+
+async function handleDeleteComment(rfiId: string, comment: RFIComment) {
+    if (!confirm('Supprimer ce commentaire ?')) return
+    
+    deletingCommentId.value = comment.id
+    try {
+        await deleteRFIComment(comment.id, currentUserId.value)
+        await loadComments(rfiId)
+    } catch (e) {
+        console.error('Error deleting comment:', e)
+        alert('Erreur lors de la suppression du commentaire')
+    } finally {
+        deletingCommentId.value = null
+    }
+}
+
+function canEditComment(comment: RFIComment): boolean {
+    return comment.senderId === currentUserId.value
 }
 </script>
 
@@ -244,6 +391,28 @@ function formatDate(date: Date): string {
                         placeholder="Décrivez votre demande d'information en détail..."
                         class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                     />
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1.5">Assigner à (optionnel)</label>
+                        <select
+                            v-model="createAssignedTo"
+                            class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        >
+                            <option value="">— Non assigné —</option>
+                            <option v-for="member in projectMembers" :key="member.id" :value="member.id">
+                                {{ member.name }} {{ member.role ? `(${member.role})` : '' }}
+                            </option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1.5">Date d'échéance (optionnel)</label>
+                        <input
+                            v-model="createDueDate"
+                            type="date"
+                            class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                        />
+                    </div>
                 </div>
                 <div class="flex justify-end">
                     <button
@@ -316,6 +485,22 @@ function formatDate(date: Date): string {
                         placeholder="Question..."
                         class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
                     />
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <select
+                            v-model="editAssignedTo"
+                            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        >
+                            <option value="">— Non assigné —</option>
+                            <option v-for="member in projectMembers" :key="member.id" :value="member.id">
+                                {{ member.name }}
+                            </option>
+                        </select>
+                        <input
+                            v-model="editDueDate"
+                            type="date"
+                            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        />
+                    </div>
                     <div class="flex items-center gap-2 justify-end">
                         <button
                             type="button"
@@ -369,6 +554,12 @@ function formatDate(date: Date): string {
                                         {{ roleConfig[getSenderRole(rfi.senderId)]?.label || getSenderRole(rfi.senderId) }}
                                     </span>
                                     <span class="text-xs text-slate-500">{{ getSenderName(rfi.senderId) }}</span>
+                                    <span v-if="rfi.assignedTo" class="text-xs text-purple-600 font-medium">
+                                        → Assigné à: {{ getAssignedToName(rfi.assignedTo) }}
+                                    </span>
+                                    <span v-if="rfi.dueDate" class="text-xs" :class="isOverdue(rfi.dueDate) ? 'text-red-500 font-medium' : 'text-slate-400'">
+                                        📅 {{ formatDateShort(rfi.dueDate) }}
+                                    </span>
                                     <span class="text-xs text-slate-300">&middot;</span>
                                     <span class="text-xs text-slate-400">{{ formatDate(rfi.createdAt) }}</span>
                                 </div>
@@ -400,6 +591,127 @@ function formatDate(date: Date): string {
                                     :class="{ 'animate-spin': deletingRFIId === rfi.id }"
                                 />
                             </button>
+                        </div>
+
+                        <!-- Thread Comments (when expanded) -->
+                        <div v-if="expandedId === rfi.id" class="mt-4 pt-4 border-t border-slate-100">
+                            <div class="flex items-center gap-2 mb-3">
+                                <Icon name="heroicons:chat-bubble-left-ellipsis" class="w-4 h-4 text-slate-400" />
+                                <span class="text-xs font-medium text-slate-600">Réponses</span>
+                                <span v-if="rfiComments[rfi.id]?.length" class="text-xs text-slate-400">({{ rfiComments[rfi.id].length }})</span>
+                            </div>
+
+                            <!-- Loading comments -->
+                            <div v-if="loadingComments[rfi.id]" class="flex items-center gap-2 py-2">
+                                <Icon name="heroicons:arrow-path" class="w-4 h-4 animate-spin text-slate-400" />
+                                <span class="text-xs text-slate-400">Chargement des réponses...</span>
+                            </div>
+
+                            <!-- Comments list -->
+                            <div v-else-if="rfiComments[rfi.id]?.length" class="space-y-3 mb-4">
+                                <div
+                                    v-for="comment in rfiComments[rfi.id]"
+                                    :key="comment.id"
+                                    class="bg-slate-50 rounded-lg p-3"
+                                >
+                                    <!-- Edit mode -->
+                                    <div v-if="editingComment === comment.id" class="space-y-2">
+                                        <textarea
+                                            v-model="editCommentText[comment.id]"
+                                            rows="2"
+                                            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                                        />
+                                        <div class="flex items-center gap-2 justify-end">
+                                            <button
+                                                type="button"
+                                                class="px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded transition-colors"
+                                                @click="editingComment = null"
+                                            >
+                                                Annuler
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="px-2 py-1 text-xs font-medium bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                                                :disabled="!editCommentText[comment.id]?.trim() || updatingComment[comment.id]"
+                                                @click="saveEditComment(rfi.id, comment.id)"
+                                            >
+                                                <Icon v-if="updatingComment[comment.id]" name="heroicons:arrow-path" class="w-3 h-3 animate-spin inline mr-1" />
+                                                {{ updatingComment[comment.id] ? 'Enregistrement...' : 'Enregistrer' }}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <!-- View mode -->
+                                    <div v-else class="flex items-start gap-2">
+                                        <div class="flex-1">
+                                            <div class="flex items-center gap-2 mb-1">
+                                                <span class="text-xs font-medium text-slate-700">{{ getSenderName(comment.senderId) }}</span>
+                                                <span class="text-[10px] text-slate-400">{{ formatDate(comment.createdAt) }}</span>
+                                            </div>
+                                            <p class="text-sm text-slate-600 whitespace-pre-line">{{ comment.message }}</p>
+                                            <div v-if="comment.linkedDocumentUrl" class="mt-2">
+                                                <a
+                                                    :href="comment.linkedDocumentUrl"
+                                                    target="_blank"
+                                                    class="inline-flex items-center gap-1 text-xs text-purple-600 hover:text-purple-700"
+                                                >
+                                                    <Icon name="heroicons:paper-clip" class="w-3 h-3" />
+                                                    {{ comment.linkedDocumentName || 'Document joint' }}
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <!-- Edit/Delete buttons -->
+                                        <div v-if="canEditComment(comment)" class="flex items-center gap-1 flex-shrink-0">
+                                            <button
+                                                type="button"
+                                                class="p-1 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded transition-colors"
+                                                title="Modifier"
+                                                @click="startEditComment(comment)"
+                                            >
+                                                <Icon name="heroicons:pencil-square" class="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="p-1 text-slate-400 hover:text-red-600 hover:bg-red-100 rounded transition-colors"
+                                                :disabled="deletingCommentId === comment.id"
+                                                title="Supprimer"
+                                                @click="handleDeleteComment(rfi.id, comment)"
+                                            >
+                                                <Icon
+                                                    :name="deletingCommentId === comment.id ? 'heroicons:arrow-path' : 'heroicons:trash'"
+                                                    class="w-3.5 h-3.5"
+                                                    :class="{ 'animate-spin': deletingCommentId === comment.id }"
+                                                />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- No comments -->
+                            <div v-else class="text-center py-4 text-xs text-slate-400 mb-4">
+                                Aucune réponse pour le moment
+                            </div>
+
+                            <!-- Add comment form -->
+                            <div class="flex gap-2">
+                                <input
+                                    v-model="newCommentText[rfi.id]"
+                                    type="text"
+                                    placeholder="Votre réponse..."
+                                    class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
+                                    @keyup.enter="submitComment(rfi.id)"
+                                />
+                                <button
+                                    type="button"
+                                    class="px-3 py-2 bg-purple-600 text-white rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50 transition-colors"
+                                    :disabled="!newCommentText[rfi.id]?.trim() || submittingComment[rfi.id]"
+                                    @click="submitComment(rfi.id)"
+                                >
+                                    <Icon v-if="submittingComment[rfi.id]" name="heroicons:arrow-path" class="w-4 h-4 animate-spin" />
+                                    <Icon v-else name="heroicons:paper-airplane" class="w-4 h-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

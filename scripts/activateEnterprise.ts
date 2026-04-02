@@ -3,7 +3,7 @@
  * À exécuter dans la console Firebase ou via un admin panel
  */
 
-import { getFirebaseFirestore } from './app/firebase/services/firestore'
+import { getFirebaseFirestore } from '../firebase/services/firestore'
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore'
 
 /**

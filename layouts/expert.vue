@@ -50,7 +50,8 @@ const navigation = {
         { path: '/expert/projets', label: 'Mes projets', icon: 'heroicons:folder-open', disabled: false }
     ],
     training: [
-        { path: '/expert/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false }
+        { path: '/expert/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false },
+        { path: '/expert/tutorials', label: 'Tutoriels Vidéo', icon: 'heroicons:play-circle', disabled: false }
     ],
     profile: [
         { path: '/profile', label: 'Mon profil', icon: 'heroicons:user-circle', disabled: false }
@@ -73,6 +74,7 @@ const pageTitle = computed(() => {
     if (path.includes('/expert/missions')) return 'Missions'
     if (path.includes('/expert/projets')) return 'Projets'
     if (path.includes('/expert/formations') || path.includes('/expert/packs')) return 'Formations/Packs'
+    if (path.includes('/expert/tutorials')) return 'Tutoriels Vidéo'
     if (path.includes('/profile')) return 'Mon profil'
     return 'Espace Expert'
 })

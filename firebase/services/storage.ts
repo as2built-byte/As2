@@ -303,10 +303,10 @@ export async function deleteFormationCoverByUrl(coverUrl: string): Promise<void>
 // ========================================
 
 /**
- * Upload a project document (PDF only, max 10MB)
+ * Upload a project document (PDF, Excel, DWG, Revit, Navisworks - max 50MB)
  * @param projectId Project ID
  * @param senderId User ID of the uploader
- * @param file PDF file to upload
+ * @param file File to upload
  * @returns Download URL of the uploaded file
  */
 export async function uploadProjectDocument(
@@ -317,17 +317,20 @@ export async function uploadProjectDocument(
     const storage = getFirebaseStorage()
 
     const timestamp = Date.now()
-    const filename = `doc_${timestamp}.pdf`
+    const fileExtension = file.name.split('.').pop()?.toLowerCase() || 'pdf'
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_').substring(0, 50)
+    const filename = `${safeName}_${timestamp}.${fileExtension}`
     const filePath = `${STORAGE_PATHS.PROJECT_DOCUMENTS}/${projectId}/${senderId}/${filename}`
 
     const storageRef = ref(storage, filePath)
 
     const metadata: UploadMetadata = {
-        contentType: 'application/pdf',
+        contentType: file.type || 'application/octet-stream',
         customMetadata: {
             projectId,
             uploadedBy: senderId,
             uploadedAt: new Date().toISOString(),
+            originalName: file.name,
         }
     }
 

@@ -369,7 +369,7 @@ async function exportToPDF() {
         pdf.setFontSize(8)
         pdf.setTextColor(100, 100, 100)
         pdf.setFont('helvetica', 'normal')
-        const footerText = 'Contact: 05 56514162 | | contact@as2built.com'
+        const footerText = 'Contact: 05 56514162 | | info@as2built.com'
         const footerWidth = pdf.getTextWidth(footerText)
         pdf.text(footerText, pageWidth / 2 - footerWidth / 2, pageHeight - 15)
         

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProjectPhoto, UserProfile } from '~/types'
+import type { ProblemType, ProblemSeverity, ProjectDocument } from '~/types'
 import {
     getPhotosByProject,
     createPhoto,
@@ -8,6 +8,9 @@ import {
     getUserProfile,
     getProject,
     isUserAssignedToProject,
+    promotePhotoToProblem,
+    getDocumentsByProject,
+    linkPhotoToDocument,
 } from '~/firebase/services/firestore'
 import {
     uploadProjectPhoto,
@@ -52,19 +55,36 @@ const isAssignedMember = ref(false)
 // Upload form
 const showUploadForm = ref(false)
 const uploadNote = ref('')
+const uploadTags = ref<string[]>([])
 const uploadFile = ref<File | null>(null)
 const uploadPreview = ref<string | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const newTagInput = ref('')
 
 // Edit state
 const editingPhoto = ref<ProjectPhoto | null>(null)
 const editNote = ref('')
+const editTags = ref<string[]>([])
 const editFile = ref<File | null>(null)
 const editPreview = ref<string | null>(null)
 const editFileInputRef = ref<HTMLInputElement | null>(null)
+const editNewTagInput = ref('')
 const saving = ref(false)
 
-// Delete state
+// Promote to Problem state
+const promotingPhoto = ref<ProjectPhoto | null>(null)
+const problemTitle = ref('')
+const problemDescription = ref('')
+const problemType = ref<ProblemType>('quality')
+const problemSeverity = ref<ProblemSeverity>('minor')
+const problemDueDate = ref('')
+const promoting = ref(false)
+
+// Link to Plan state
+const linkingPhoto = ref<ProjectPhoto | null>(null)
+const planDocuments = ref<ProjectDocument[]>([])
+const selectedPlanId = ref('')
+const linking = ref(false)
 const deletingPhotoId = ref<string | null>(null)
 
 // Lightbox
@@ -193,6 +213,7 @@ async function handleUpload() {
 function startEdit(photo: ProjectPhoto) {
     editingPhoto.value = photo
     editNote.value = photo.note
+    editTags.value = [...(photo.tags || [])]
     editFile.value = null
     editPreview.value = null
     if (editFileInputRef.value) editFileInputRef.value.value = ''
@@ -229,6 +250,7 @@ async function saveEdit() {
         }
         await updatePhoto(editingPhoto.value.id, {
             note: editNote.value.trim(),
+            tags: editTags.value,
             ...(newImageUrl ? { imageUrl: newImageUrl } : {}),
         })
         editingPhoto.value = null
@@ -278,29 +300,189 @@ function formatDate(date: Date): string {
         minute: '2-digit',
     }).format(date)
 }
+
+// ========================================
+// Tag Management Functions
+// ========================================
+
+const commonTags = ['Fondations', 'Étage1', 'Étage2', 'Coffrage', 'Ferraillage', 'Béton', 'Structure', 'Façade', 'Toiture', 'Intérieur', 'Extérieur']
+
+function addTag(tag: string, target: 'upload' | 'edit') {
+    const trimmed = tag.trim()
+    if (!trimmed) return
+    
+    if (target === 'upload') {
+        if (!uploadTags.value.includes(trimmed)) {
+            uploadTags.value.push(trimmed)
+        }
+        newTagInput.value = ''
+    } else {
+        if (!editTags.value.includes(trimmed)) {
+            editTags.value.push(trimmed)
+        }
+        editNewTagInput.value = ''
+    }
+}
+
+function removeTag(tag: string, target: 'upload' | 'edit') {
+    if (target === 'upload') {
+        uploadTags.value = uploadTags.value.filter(t => t !== tag)
+    } else {
+        editTags.value = editTags.value.filter(t => t !== tag)
+    }
+}
+
+// ========================================
+// Promote to Problem Functions
+// ========================================
+
+function openPromoteModal(photo: ProjectPhoto) {
+    promotingPhoto.value = photo
+    problemTitle.value = `Problème sur photo: ${photo.note?.substring(0, 30) || 'Sans titre'}`
+    problemDescription.value = `Problème identifié sur la photo du ${formatDate(photo.createdAt)}.\n\nNote: ${photo.note || 'Aucune note'}`
+    problemType.value = 'quality'
+    problemSeverity.value = 'minor'
+    problemDueDate.value = ''
+}
+
+async function submitPromoteToProblem() {
+    if (!promotingPhoto.value || !problemTitle.value.trim() || !currentUserId.value) return
+    
+    promoting.value = true
+    try {
+        const dueDate = problemDueDate.value ? new Date(problemDueDate.value) : undefined
+        
+        await promotePhotoToProblem(
+            promotingPhoto.value.id,
+            {
+                title: problemTitle.value.trim(),
+                description: problemDescription.value.trim(),
+                type: problemType.value,
+                severity: problemSeverity.value,
+                dueDate,
+            },
+            currentUserId.value
+        )
+        
+        // Mark photo as promoted in local state
+        promotingPhoto.value.promotedToProblem = true
+        
+        promotingPhoto.value = null
+        problemTitle.value = ''
+        problemDescription.value = ''
+        problemType.value = 'quality'
+        problemSeverity.value = 'minor'
+        problemDueDate.value = ''
+        
+        alert('Problème créé avec succès! La photo a été liée au problème.')
+        await loadPhotos()
+    } catch (e) {
+        console.error('Error promoting photo to problem:', e)
+        alert('Erreur lors de la création du problème')
+    } finally {
+        promoting.value = false
+    }
+}
+
+// ========================================
+// Link Photo to Plan Functions
+// ========================================
+
+async function openLinkToPlanModal(photo: ProjectPhoto) {
+    linkingPhoto.value = photo
+    selectedPlanId.value = ''
+    // Load plan documents (type 'plan' or category 'plan')
+    try {
+        const docs = await getDocumentsByProject(projectId.value)
+        planDocuments.value = docs.filter(d => 
+            d.category?.toLowerCase() === 'plan' || 
+            d.type?.toLowerCase() === 'plan' ||
+            d.name?.toLowerCase().includes('plan')
+        )
+    } catch (e) {
+        console.error('Error loading plan documents:', e)
+        planDocuments.value = []
+    }
+}
+
+async function submitLinkToPlan() {
+    if (!linkingPhoto.value || !selectedPlanId.value || !currentUserId.value) return
+    
+    linking.value = true
+    try {
+        await linkPhotoToDocument(linkingPhoto.value.id, selectedPlanId.value, currentUserId.value)
+        
+        // Update local state
+        if (!linkingPhoto.value.linkedDocuments) {
+            linkingPhoto.value.linkedDocuments = []
+        }
+        if (!linkingPhoto.value.linkedDocuments.includes(selectedPlanId.value)) {
+            linkingPhoto.value.linkedDocuments.push(selectedPlanId.value)
+        }
+        
+        linkingPhoto.value = null
+        selectedPlanId.value = ''
+        
+        alert('Photo liée au plan avec succès!')
+        await loadPhotos()
+    } catch (e) {
+        console.error('Error linking photo to plan:', e)
+        alert('Erreur lors de la liaison de la photo au plan')
+    } finally {
+        linking.value = false
+    }
+}
 </script>
 
 <template>
-    <div class="max-w-5xl mx-auto">
-        <!-- Header -->
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
-                    <Icon name="heroicons:camera" class="w-5 h-5 text-rose-600" />
+    <div class="page-container">
+        <!-- Header avec StorageLimitBar -->
+        <div class="page-header">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-lg bg-rose-100 flex items-center justify-center">
+                        <Icon name="heroicons:camera" class="w-5 h-5 text-rose-600" />
+                    </div>
+                    <div>
+                        <h1 class="page-title">Photos</h1>
+                        <p class="page-subtitle">{{ photos.length }} photo{{ photos.length > 1 ? 's' : '' }}</p>
+                    </div>
                 </div>
-                <div>
-                    <h2 class="text-xl font-bold text-slate-800">Photos</h2>
-                    <p class="text-sm text-slate-500">{{ photos.length }} photo{{ photos.length > 1 ? 's' : '' }}</p>
+                
+                <!-- Storage Limit Bar -->
+                <div class="flex-1 max-w-md">
+                    <StorageLimitBar
+                        v-if="enterprise"
+                        :plan="enterprise.plan || 'free'"
+                        :storage-used="enterprise.storageUsed || 0"
+                        :compact="true"
+                    />
+                </div>
+                
+                <button
+                    type="button"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700 shadow-sm transition-colors"
+                    @click="showUploadForm = !showUploadForm"
+                >
+                    <Icon :name="showUploadForm ? 'heroicons:x-mark' : 'heroicons:plus-circle'" class="w-5 h-5" />
+                    {{ showUploadForm ? 'Annuler' : 'Ajouter une photo' }}
+                </button>
+            </div>
+        </div>
+
+        <!-- Upgrade message for free plan -->
+        <div v-if="profile?.role === 'enterprise' && enterprise?.plan === 'free'" 
+             class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+            <div class="flex items-center gap-3">
+                <Icon name="heroicons:information-circle" class="w-5 h-5 text-amber-600" />
+                <div class="flex-1">
+                    <p class="text-sm text-amber-800">
+                        Le plan Gratuit ne permet pas d'uploader de photos. 
+                        <NuxtLink to="/entreprise/abonnement" class="font-medium underline">Passez au pack Bronze</NuxtLink> 
+                        pour debloquer cette fonctionnalite.
+                    </p>
                 </div>
             </div>
-            <button
-                type="button"
-                class="inline-flex items-center gap-2 px-4 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700 shadow-sm transition-colors"
-                @click="showUploadForm = !showUploadForm"
-            >
-                <Icon :name="showUploadForm ? 'heroicons:x-mark' : 'heroicons:plus-circle'" class="w-5 h-5" />
-                {{ showUploadForm ? 'Annuler' : 'Ajouter une photo' }}
-            </button>
         </div>
 
         <!-- Upload Form -->
@@ -329,6 +511,46 @@ function formatDate(date: Date): string {
                         placeholder="Description ou note..."
                         class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 focus:border-transparent resize-none"
                     />
+                </div>
+                
+                <!-- Tags -->
+                <div class="mb-4">
+                    <label class="block text-xs font-medium text-slate-600 mb-1.5">Tags de chantier</label>
+                    <div class="flex flex-wrap gap-2 mb-2">
+                        <span
+                            v-for="tag in uploadTags"
+                            :key="tag"
+                            class="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 rounded text-xs"
+                        >
+                            {{ tag }}
+                            <button @click="removeTag(tag, 'upload')" class="hover:text-rose-900">×</button>
+                        </span>
+                    </div>
+                    <div class="flex gap-2">
+                        <input
+                            v-model="newTagInput"
+                            type="text"
+                            placeholder="Ajouter un tag..."
+                            class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                            @keyup.enter="addTag(newTagInput, 'upload')"
+                        />
+                        <button
+                            @click="addTag(newTagInput, 'upload')"
+                            class="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200"
+                        >
+                            Ajouter
+                        </button>
+                    </div>
+                    <div class="flex flex-wrap gap-1 mt-2">
+                        <span
+                            v-for="tag in commonTags"
+                            :key="tag"
+                            @click="addTag(tag, 'upload')"
+                            class="px-2 py-1 bg-slate-100 text-slate-600 rounded text-xs cursor-pointer hover:bg-slate-200"
+                        >
+                            + {{ tag }}
+                        </span>
+                    </div>
                 </div>
                 <div class="flex justify-end">
                     <button
@@ -418,6 +640,36 @@ function formatDate(date: Date): string {
                             class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none"
                         />
                     </div>
+                    
+                    <!-- Edit Tags -->
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 mb-1">Tags</label>
+                        <div class="flex flex-wrap gap-2 mb-2">
+                            <span
+                                v-for="tag in editTags"
+                                :key="tag"
+                                class="inline-flex items-center gap-1 px-2 py-1 bg-rose-100 text-rose-700 rounded text-xs"
+                            >
+                                {{ tag }}
+                                <button @click="removeTag(tag, 'edit')" class="hover:text-rose-900">×</button>
+                            </span>
+                        </div>
+                        <div class="flex gap-2">
+                            <input
+                                v-model="editNewTagInput"
+                                type="text"
+                                placeholder="Ajouter un tag..."
+                                class="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                @keyup.enter="addTag(editNewTagInput, 'edit')"
+                            />
+                            <button
+                                @click="addTag(editNewTagInput, 'edit')"
+                                class="px-3 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm hover:bg-slate-200"
+                            >
+                                Ajouter
+                            </button>
+                        </div>
+                    </div>
                     <div class="flex items-center gap-2 justify-end">
                         <button
                             type="button"
@@ -455,6 +707,17 @@ function formatDate(date: Date): string {
 
                     <!-- Info -->
                     <div class="p-3">
+                        <!-- Tags -->
+                        <div v-if="photo.tags && photo.tags.length > 0" class="flex flex-wrap gap-1 mb-2">
+                            <span
+                                v-for="tag in photo.tags"
+                                :key="tag"
+                                class="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px]"
+                            >
+                                #{{ tag }}
+                            </span>
+                        </div>
+                        
                         <p v-if="photo.note" class="text-sm text-slate-700 mb-2 line-clamp-2">{{ photo.note }}</p>
 
                         <!-- Sender info -->
@@ -471,6 +734,33 @@ function formatDate(date: Date): string {
                         <div class="flex items-center justify-between">
                             <span class="text-xs text-slate-400">{{ formatDate(photo.createdAt) }}</span>
                             <div class="flex items-center gap-1">
+                                <!-- Link to Plan button -->
+                                <button
+                                    v-if="canEdit(photo)"
+                                    type="button"
+                                    class="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Lier à un plan"
+                                    @click="openLinkToPlanModal(photo)"
+                                >
+                                    <Icon name="heroicons:document-link" class="w-4 h-4" />
+                                </button>
+                                <!-- Promote to Problem button -->
+                                <button
+                                    v-if="!photo.promotedToProblem && canEdit(photo)"
+                                    type="button"
+                                    class="p-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors"
+                                    title="Promouvoir en Problème"
+                                    @click="openPromoteModal(photo)"
+                                >
+                                    <Icon name="heroicons:exclamation-triangle" class="w-4 h-4" />
+                                </button>
+                                <span v-if="photo.promotedToProblem" class="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-[10px] font-medium">
+                                    Problème
+                                </span>
+                                <!-- Linked Plans indicator -->
+                                <span v-if="photo.linkedDocuments?.length" class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">
+                                    {{ photo.linkedDocuments.length }} plan{{ photo.linkedDocuments.length > 1 ? 's' : '' }}
+                                </span>
                                 <button
                                     v-if="canEdit(photo)"
                                     type="button"
@@ -529,6 +819,147 @@ function formatDate(date: Date): string {
                             <span class="text-xs text-slate-400">
                                 {{ getSenderName(lightboxPhoto.senderId) }} · {{ formatDate(lightboxPhoto.createdAt) }}
                             </span>
+                        </div>
+                    </div>
+                </div>
+            </Transition>
+        </Teleport>
+
+        <!-- Promote to Problem Modal -->
+        <Teleport to="body">
+            <Transition name="fade">
+                <div
+                    v-if="promotingPhoto"
+                    class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+                    @click.self="promotingPhoto = null"
+                >
+                    <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+                        <h3 class="text-lg font-bold text-slate-800 mb-2">Promouvoir en Problème</h3>
+                        <p class="text-sm text-slate-600 mb-4">Créer un problème lié à cette photo.</p>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Titre</label>
+                                <input
+                                    v-model="problemTitle"
+                                    type="text"
+                                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                />
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Description</label>
+                                <textarea
+                                    v-model="problemDescription"
+                                    rows="3"
+                                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none"
+                                />
+                            </div>
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Type</label>
+                                    <select v-model="problemType" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                                        <option value="safety">Sécurité</option>
+                                        <option value="quality">Qualité</option>
+                                        <option value="design">Conception</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-slate-600 mb-1">Sévérité</label>
+                                    <select v-model="problemSeverity" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
+                                        <option value="minor">Mineur</option>
+                                        <option value="major">Majeur</option>
+                                        <option value="critical">Critique</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-slate-600 mb-1">Date d'échéance (optionnel)</label>
+                                <input
+                                    v-model="problemDueDate"
+                                    type="date"
+                                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-rose-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-3 mt-6">
+                            <button
+                                type="button"
+                                class="px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors text-sm"
+                                @click="promotingPhoto = null"
+                            >
+                                Annuler
+                            </button>
+                            <button
+                                type="button"
+                                class="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                                :disabled="!problemTitle.trim() || promoting"
+                                @click="submitPromoteToProblem"
+                            >
+                                <Icon v-if="promoting" name="heroicons:arrow-path" class="w-4 h-4 animate-spin" />
+                                <Icon v-else name="heroicons:exclamation-triangle" class="w-4 h-4" />
+                                {{ promoting ? 'Création...' : 'Créer le problème' }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </Transition>
+        </Teleport>
+
+        <!-- Link to Plan Modal -->
+        <Teleport to="body">
+            <Transition name="fade">
+                <div
+                    v-if="linkingPhoto"
+                    class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+                    @click.self="linkingPhoto = null"
+                >
+                    <div class="bg-white rounded-xl max-w-md w-full p-6 shadow-xl">
+                        <h3 class="text-lg font-bold text-slate-800 mb-2">Lier à un plan</h3>
+                        <p class="text-sm text-slate-600 mb-4">Sélectionnez un plan à lier à cette photo.</p>
+
+                        <div v-if="planDocuments.length === 0" class="text-center py-4 text-sm text-slate-500">
+                            Aucun plan disponible dans ce projet.
+                        </div>
+
+                        <div v-else class="space-y-2 max-h-60 overflow-y-auto">
+                            <label
+                                v-for="doc in planDocuments"
+                                :key="doc.id"
+                                class="flex items-center gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-50 transition-colors"
+                                :class="{ 'bg-blue-50 border-blue-300': selectedPlanId === doc.id }"
+                            >
+                                <input
+                                    v-model="selectedPlanId"
+                                    type="radio"
+                                    :value="doc.id"
+                                    class="w-4 h-4 text-blue-600"
+                                />
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-slate-700">{{ doc.name }}</p>
+                                    <p v-if="doc.category" class="text-xs text-slate-500">{{ doc.category }}</p>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div class="flex justify-end gap-3 mt-6">
+                            <button
+                                type="button"
+                                class="px-4 py-2 text-slate-600 hover:text-slate-800 transition-colors text-sm"
+                                @click="linkingPhoto = null"
+                            >
+                                Annuler
+                            </button>
+                            <button
+                                type="button"
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-2"
+                                :disabled="!selectedPlanId || linking"
+                                @click="submitLinkToPlan"
+                            >
+                                <Icon v-if="linking" name="heroicons:arrow-path" class="w-4 h-4 animate-spin" />
+                                <Icon v-else name="heroicons:document-link" class="w-4 h-4" />
+                                {{ linking ? 'Liaison...' : 'Lier au plan' }}
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -9,10 +9,17 @@ export type NotificationType =
     | 'new_registration'
     | 'certification_request'
     | 'subscription_request'
-    | 'audit_request'         // Enterprise requested a BIM maturity audit
+    | 'audit_request'
     | 'new_mission'
-    | 'mission_invitation'    // Expert invited to a mission
-    | 'mission_accepted'      // Expert accepted a mission (notify enterprise)
+    | 'mission_invitation'
+    | 'mission_accepted'
+    // Project-specific notifications
+    | 'rfi_assigned'        // User assigned to an RFI
+    | 'problem_assigned'    // User assigned to a Problem
+    | 'rfi_response'        // New response on user's RFI
+    | 'document_approved'   // Document approved
+    | 'document_rejected'   // Document rejected
+    | 'mention'             // User mentioned in comment
 
 export type NotificationTargetRole = 'admin' | 'expert' | 'enterprise'
 

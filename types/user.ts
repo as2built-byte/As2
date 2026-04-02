@@ -9,7 +9,7 @@
 // ========================================
 
 /** User roles in the system */
-export type UserRole = 'enterprise' | 'expert' | 'admin'
+export type UserRole = 'enterprise' | 'expert' | 'admin' | 'guest'
 
 /** User account status */
 export type UserStatus = 'active' | 'pending' | 'inactive' | 'deleted'
@@ -124,7 +124,7 @@ export interface UserProfile {
 
 /** Data for creating a new user (without uid and createdAt) */
 export interface CreateUserData {
-    email: string
+    email: string | null
     firstName: string
     lastName: string
     phone: string
@@ -132,6 +132,8 @@ export interface CreateUserData {
     status: UserStatus
     enterpriseOwnerId?: string
     memberRole?: string
+    authProvider?: string
+    isAnonymous?: boolean
 }
 
 // ========================================

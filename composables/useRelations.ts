@@ -125,7 +125,7 @@ export function useRelations(projectId: string) {
         }
     }
 
-    const getEntityRelations = async (
+    const fetchEntityRelations = async (
         entityType: RelationEntityType,
         entityId: string
     ): Promise<EntityRelations | null> => {
@@ -201,7 +201,7 @@ export function useRelations(projectId: string) {
         loadRelations,
         createRelationBetween,
         removeRelation,
-        getEntityRelations,
+        getEntityRelations: fetchEntityRelations,
         searchRelationsQuery,
         parseTags,
         createRelationsFromText
@@ -226,7 +226,7 @@ export function useRelationTags() {
             id,
             displayText: displayText || `@${type}:${id}`,
             startPosition: text.value.length,
-            endPosition: text.value.length + displayText?.length || `@${type}:${id}`.length
+            endPosition: text.value.length + (displayText?.length || `@${type}:${id}`.length)
         }
         
         tags.value.push(tag)

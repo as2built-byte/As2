@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ProjectProblem, ProblemSeverity, UserProfile } from '~/types'
+import type { ProjectProblem, ProblemSeverity, UserProfile, ProblemType } from '~/types'
 import {
     getProblemsByProject,
     createProblem,
@@ -8,6 +8,7 @@ import {
     getUserProfile,
     getProject,
     isUserAssignedToProject,
+    getMembersByProject,
 } from '~/firebase/services/firestore'
 
 definePageMeta({
@@ -28,12 +29,16 @@ const searchQuery = ref('')
 const severityFilter = ref<'all' | ProblemSeverity>('all')
 const projectEnterpriseId = ref<string>('')
 const isAssignedMember = ref(false)
+const projectMembers = ref<Array<{ id: string; name: string; role?: string; email?: string }>>([])
 
 // Create form
 const showCreateForm = ref(false)
 const createTitle = ref('')
 const createDescription = ref('')
 const createSeverity = ref<ProblemSeverity>('medium')
+const createType = ref<ProblemType>('quality')
+const createAssignedTo = ref('')
+const createDueDate = ref('')
 const creating = ref(false)
 
 // Edit state
@@ -41,6 +46,9 @@ const editingProblem = ref<ProjectProblem | null>(null)
 const editTitle = ref('')
 const editDescription = ref('')
 const editSeverity = ref<ProblemSeverity>('medium')
+const editType = ref<ProblemType>('quality')
+const editAssignedTo = ref('')
+const editDueDate = ref('')
 const saving = ref(false)
 
 // Delete state
@@ -93,6 +101,19 @@ onMounted(async () => {
         if (user.value?.uid && profile.value?.enterpriseOwnerId) {
             isAssignedMember.value = await isUserAssignedToProject(user.value.uid, projectId.value)
         }
+        // Load project members for assignment
+        const members = await getMembersByProject(projectId.value)
+        projectMembers.value = await Promise.all(
+            members.map(async (m) => {
+                const profile = await getUserProfile(m.userId)
+                return {
+                    id: m.userId,
+                    name: profile ? `${profile.firstName} ${profile.lastName}` : m.userId,
+                    role: m.role,
+                    email: profile?.email
+                }
+            })
+        )
     } catch (e) { /* ignore */ }
     await loadProblems()
 })
@@ -131,12 +152,18 @@ async function handleCreate() {
             title: createTitle.value.trim(),
             description: createDescription.value.trim(),
             severity: createSeverity.value,
+            type: createType.value,
+            assignedTo: createAssignedTo.value || undefined,
+            dueDate: createDueDate.value ? new Date(createDueDate.value) : undefined,
         })
 
         // Reset form
         createTitle.value = ''
         createDescription.value = ''
         createSeverity.value = 'medium'
+        createType.value = 'quality'
+        createAssignedTo.value = ''
+        createDueDate.value = ''
         showCreateForm.value = false
 
         await loadProblems()
@@ -154,6 +181,9 @@ function startEdit(problem: ProjectProblem) {
     editTitle.value = problem.title
     editDescription.value = problem.description
     editSeverity.value = problem.severity
+    editType.value = problem.type
+    editAssignedTo.value = problem.assignedTo || ''
+    editDueDate.value = problem.dueDate ? new Date(problem.dueDate).toISOString().split('T')[0] : ''
 }
 
 // Save edit
@@ -165,6 +195,9 @@ async function saveEdit() {
             title: editTitle.value.trim(),
             description: editDescription.value.trim(),
             severity: editSeverity.value,
+            type: editType.value,
+            assignedTo: editAssignedTo.value || null,
+            dueDate: editDueDate.value ? new Date(editDueDate.value) : null,
         })
         editingProblem.value = null
         await loadProblems()
@@ -208,6 +241,22 @@ function formatDate(date: Date): string {
         hour: '2-digit',
         minute: '2-digit',
     }).format(date)
+}
+
+function isOverdue(date: Date): boolean {
+    return new Date(date) < new Date()
+}
+
+function formatDateShort(date: Date): string {
+    return new Intl.DateTimeFormat('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+    }).format(new Date(date))
+}
+
+function getAssignedToName(userId: string): string {
+    const member = projectMembers.value.find(m => m.id === userId)
+    return member?.name || '—'
 }
 
 // Stats
@@ -301,6 +350,28 @@ const stats = computed(() => ({
                         placeholder="Décrivez le problème en détail..."
                         class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-none"
                     />
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1.5">Assigner à (optionnel)</label>
+                        <select
+                            v-model="createAssignedTo"
+                            class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        >
+                            <option value="">— Non assigné —</option>
+                            <option v-for="member in projectMembers" :key="member.id" :value="member.id">
+                                {{ member.name }} {{ member.role ? `(${member.role})` : '' }}
+                            </option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 mb-1.5">Date d'échéance (optionnel)</label>
+                        <input
+                            v-model="createDueDate"
+                            type="date"
+                            class="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                        />
+                    </div>
                 </div>
                 <div class="flex justify-end">
                     <button
@@ -398,6 +469,22 @@ const stats = computed(() => ({
                         placeholder="Description..."
                         class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 resize-none"
                     />
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <select
+                            v-model="editAssignedTo"
+                            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        >
+                            <option value="">— Non assigné —</option>
+                            <option v-for="member in projectMembers" :key="member.id" :value="member.id">
+                                {{ member.name }}
+                            </option>
+                        </select>
+                        <input
+                            v-model="editDueDate"
+                            type="date"
+                            class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                    </div>
                     <div class="flex items-center gap-2 justify-end">
                         <button
                             type="button"
@@ -450,6 +537,12 @@ const stats = computed(() => ({
                                         {{ roleConfig[getSenderRole(problem.senderId)]?.label || getSenderRole(problem.senderId) }}
                                     </span>
                                     <span class="text-xs text-slate-500">{{ getSenderName(problem.senderId) }}</span>
+                                    <span v-if="problem.assignedTo" class="text-xs text-amber-600 font-medium">
+                                        → Assigné à: {{ getAssignedToName(problem.assignedTo) }}
+                                    </span>
+                                    <span v-if="problem.dueDate" class="text-xs" :class="isOverdue(problem.dueDate) ? 'text-red-500 font-medium' : 'text-slate-400'">
+                                        📅 {{ formatDateShort(problem.dueDate) }}
+                                    </span>
                                     <span class="text-xs text-slate-300">&middot;</span>
                                     <span class="text-xs text-slate-400">{{ formatDate(problem.createdAt) }}</span>
                                 </div>

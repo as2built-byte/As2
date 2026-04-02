@@ -18,7 +18,11 @@ export default defineNuxtConfig({
   },
 
   // 3. Tes modules et config habituels
-  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', 'nuxt-icon', '@nuxt/ui'],
+  modules: ['@nuxtjs/tailwindcss', '@pinia/nuxt', 'nuxt-icon'],
+  
+  typescript: {
+    typeCheck: false
+  },
   
   devtools: { enabled: true },
 

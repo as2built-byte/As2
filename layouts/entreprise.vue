@@ -91,7 +91,8 @@ const navigation = computed(() => {
             { path: '/entreprise/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: false }
         ]
         nav.training = [
-            { path: '/entreprise/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false }
+            { path: '/entreprise/formations', label: 'Formations/Packs', icon: 'heroicons:academic-cap', disabled: false },
+            { path: '/entreprise/tutorials', label: 'Tutoriels Vidéo', icon: 'heroicons:play-circle', disabled: false }
         ]
         nav.membres = [
             { path: '/entreprise/membres', label: 'Membres', icon: 'heroicons:user-group', disabled: false }
@@ -118,6 +119,7 @@ const pageTitle = computed(() => {
     if (path.includes('/entreprise/projets')) return 'Nos projets'
     if (path.includes('/entreprise/audits')) return 'Audits'
     if (path.includes('/entreprise/formations') || path.includes('/entreprise/packs')) return 'Formations/Packs'
+    if (path.includes('/entreprise/tutorials')) return 'Tutoriels Vidéo'
     if (path.includes('/entreprise/membres')) return 'Membres'
     if (path.includes('/entreprise/abonnement')) return 'Abonnement'
     if (path.includes('/profile')) return 'Mon profil'

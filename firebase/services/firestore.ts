@@ -39,11 +39,21 @@ import {
     type ProjectDocument,
     type CreateDocumentData,
     type DocumentType,
+    type DocumentStatus,
+    type DocumentMetadata,
+    type DocumentApproval,
+    type ApprovalStatus,
+    type DocumentVersion,
+    type CreateVersionData,
     type ProjectPhoto,
     type CreatePhotoData,
+    type ApprovalHistory,
+    type ApprovalReview,
+    type PDFAnnotation,
     type ProjectProblem,
     type CreateProblemData,
     type ProblemSeverity,
+    type ProblemType,
     type ProjectRFI,
     type CreateRFIData,
     type ProjectSubmission,
@@ -115,6 +125,11 @@ export const COLLECTIONS = {
     SUBMISSIONS: 'submissions',
     PROJECT_MEMBERS: 'project_members',
     AUDITS: 'audits',
+    APPROVALS: 'approvals',
+    APPROVAL_HISTORY: 'approval_history',
+    DOCUMENT_VERSIONS: 'document_versions',
+    NOTIFICATIONS: 'notifications',
+    RFI_COMMENTS: 'rfi_comments',
 } as const
 
 // ========================================
@@ -438,6 +453,7 @@ export async function createPlanChangeRequest(
         await createNotification(
             'admin',
             {
+                userId: 'admin',
                 type: 'plan_change_request',
                 title: 'Nouvelle demande de changement de plan',
                 message: `L'entreprise ${enterpriseId} demande le plan ${requestedPlan} (en attente d'approbation)`
@@ -506,6 +522,7 @@ export async function approvePlanChangeRequest(
     await createNotification(
         request.enterpriseId,
         {
+            userId: request.enterpriseId,
             type: 'plan_change_approved',
             title: 'Changement de plan approuvé',
             message: `Votre changement de plan vers ${request.requestedPlan} a été confirmé avec succès.`
@@ -560,6 +577,7 @@ export async function rejectPlanChangeRequest(
     await createNotification(
         request.enterpriseId,
         {
+            userId: request.enterpriseId,
             type: 'plan_change_rejected',
             title: 'Changement de plan refusé',
             message: `Votre demande de changement vers ${request.requestedPlan} a été refusée. Motif: ${notes}`
@@ -611,6 +629,7 @@ export async function checkExpiredTrialPeriods(): Promise<void> {
         await createNotification(
             request.enterpriseId,
             {
+                userId: request.enterpriseId,
                 type: 'plan_change_expired',
                 title: 'Période d\'essai expirée',
                 message: `Votre période d'essai pour le plan ${request.requestedPlan} a expiré. Vous êtes revenu au plan ${request.previousPlan}.`
@@ -1743,6 +1762,14 @@ export async function getDocumentsByProject(projectId: string): Promise<ProjectD
             title: data.title,
             fileUrl: data.fileUrl,
             type: data.type,
+            status: data.status || 'wip',
+            description: data.description || '',
+            fileSize: data.fileSize || 0,
+            metadata: data.metadata,
+            lockedBy: data.lockedBy || null,
+            lockedAt: data.lockedAt?.toDate() || null,
+            extractedText: data.extractedText || null,
+            hasTextContent: data.hasTextContent || false,
             createdAt: data.createdAt?.toDate() || new Date(),
         } as ProjectDocument
     })
@@ -1769,6 +1796,10 @@ export async function createDocument(
         title: data.title,
         fileUrl,
         type: data.type,
+        status: data.status || 'wip',
+        description: data.description || null,
+        fileSize: data.fileSize || null,
+        metadata: data.metadata || null,
         createdAt: serverTimestamp(),
     })
 
@@ -1776,11 +1807,11 @@ export async function createDocument(
 }
 
 /**
- * Update a project document (title, type, fileUrl)
+ * Update a project document (title, type, fileUrl, status)
  */
 export async function updateDocument(
     documentId: string,
-    data: { title?: string; type?: DocumentType; fileUrl?: string }
+    data: { title?: string; type?: DocumentType; fileUrl?: string; status?: DocumentStatus }
 ): Promise<void> {
     const db = getFirebaseFirestore()
     const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
@@ -1794,6 +1825,171 @@ export async function deleteDocument(documentId: string): Promise<void> {
     const db = getFirebaseFirestore()
     const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
     await deleteDoc(docRef)
+}
+
+// ========================================
+// Document Check-in / Check-out (Locking)
+// ========================================
+
+/**
+ * Checkout a document (lock it for editing)
+ * @returns true if successful, false if already locked
+ */
+export async function checkoutDocument(documentId: string, userId: string): Promise<boolean> {
+    const db = getFirebaseFirestore()
+    const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    
+    // Check if already locked
+    const docSnap = await getDoc(docRef)
+    if (!docSnap.exists()) {
+        throw new Error('Document not found')
+    }
+    
+    const data = docSnap.data()
+    if (data.lockedBy && data.lockedBy !== userId) {
+        return false // Already locked by someone else
+    }
+    
+    if (data.lockedBy === userId) {
+        return true // Already locked by this user
+    }
+    
+    // Lock the document
+    await updateDoc(docRef, {
+        lockedBy: userId,
+        lockedAt: serverTimestamp()
+    })
+    
+    return true
+}
+
+/**
+ * Checkin a document (unlock it)
+ */
+export async function checkinDocument(documentId: string, userId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    
+    const docSnap = await getDoc(docRef)
+    if (!docSnap.exists()) {
+        throw new Error('Document not found')
+    }
+    
+    const data = docSnap.data()
+    
+    // Only the user who locked it can unlock it (or admin could force unlock)
+    if (data.lockedBy && data.lockedBy !== userId) {
+        throw new Error('Document is locked by another user')
+    }
+    
+    await updateDoc(docRef, {
+        lockedBy: null,
+        lockedAt: null
+    })
+}
+
+/**
+ * Force unlock a document (admin only)
+ */
+export async function forceUnlockDocument(documentId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    
+    await updateDoc(docRef, {
+        lockedBy: null,
+        lockedAt: null
+    })
+}
+
+// ========================================
+// Document OCR / Full-Text Search Functions
+// ========================================
+
+/**
+ * Update a document with extracted text from OCR
+ * Call this after text has been extracted from PDF (via Cloud Function)
+ */
+export async function updateDocumentExtractedText(
+    documentId: string,
+    extractedText: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const docRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    
+    await updateDoc(docRef, {
+        extractedText,
+        hasTextContent: !!extractedText && extractedText.length > 0,
+        updatedAt: serverTimestamp()
+    })
+}
+
+/**
+ * Search documents by extracted text content
+ * This searches within the extracted OCR text of documents
+ */
+export async function searchDocumentsByText(
+    projectId: string,
+    searchQuery: string
+): Promise<ProjectDocument[]> {
+    const db = getFirebaseFirestore()
+    const docsRef = collection(db, COLLECTIONS.DOCUMENTS)
+    
+    // Note: For full-text search, you should use Algolia or similar
+    // This is a basic implementation that fetches and filters client-side
+    // For production, implement a Cloud Function with proper indexing
+    const q = query(
+        docsRef, 
+        where('projectId', '==', projectId),
+        where('hasTextContent', '==', true)
+    )
+    const querySnapshot = await getDocs(q)
+
+    const searchLower = searchQuery.toLowerCase()
+    const docs = querySnapshot.docs
+        .map(docSnap => {
+            const data = docSnap.data()
+            return {
+                id: docSnap.id,
+                projectId: data.projectId,
+                senderId: data.senderId,
+                title: data.title,
+                fileUrl: data.fileUrl,
+                type: data.type,
+                status: data.status || 'wip',
+                description: data.description || '',
+                fileSize: data.fileSize || 0,
+                metadata: data.metadata,
+                lockedBy: data.lockedBy || null,
+                lockedAt: data.lockedAt?.toDate() || null,
+                extractedText: data.extractedText || null,
+                hasTextContent: data.hasTextContent || false,
+                createdAt: data.createdAt?.toDate() || new Date(),
+            } as ProjectDocument
+        })
+        .filter(doc => 
+            doc.extractedText?.toLowerCase().includes(searchLower) ||
+            doc.title.toLowerCase().includes(searchLower) ||
+            doc.description?.toLowerCase().includes(searchLower)
+        )
+
+    return docs.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Request OCR text extraction for a document
+ * This triggers a Cloud Function to extract text from the PDF
+ * Note: This is a placeholder - implement with actual Cloud Function call
+ */
+export async function requestTextExtraction(documentId: string): Promise<void> {
+    // TODO: Implement Cloud Function call for text extraction
+    // For now, this is a placeholder that logs the request
+    console.log('Requesting text extraction for document:', documentId)
+    
+    // In production, call a Cloud Function like:
+    // const { getFunctions, httpsCallable } = await import('firebase/functions')
+    // const functions = getFunctions()
+    // const extractText = httpsCallable(functions, 'extractPdfText')
+    // await extractText({ documentId })
 }
 
 // ========================================
@@ -1817,6 +2013,12 @@ export async function getPhotosByProject(projectId: string): Promise<ProjectPhot
             senderId: data.senderId,
             imageUrl: data.imageUrl,
             note: data.note || '',
+            tags: data.tags || [],
+            gpsLatitude: data.gpsLatitude,
+            gpsLongitude: data.gpsLongitude,
+            linkedDocuments: data.linkedDocuments || [],
+            promotedToProblem: data.promotedToProblem || false,
+            problemId: data.problemId,
             createdAt: data.createdAt?.toDate() || new Date(),
         } as ProjectPhoto
     })
@@ -1842,6 +2044,11 @@ export async function createPhoto(
         senderId,
         imageUrl,
         note: data.note,
+        tags: data.tags || [],
+        gpsLatitude: data.gpsLatitude,
+        gpsLongitude: data.gpsLongitude,
+        linkedDocuments: data.linkedDocuments || [],
+        promotedToProblem: false,
         createdAt: serverTimestamp(),
     })
 
@@ -1849,15 +2056,70 @@ export async function createPhoto(
 }
 
 /**
- * Update a project photo (note, imageUrl)
+ * Update a project photo (note, imageUrl, tags)
  */
 export async function updatePhoto(
     photoId: string,
-    data: { note?: string; imageUrl?: string }
+    data: { note?: string; imageUrl?: string; tags?: string[] }
 ): Promise<void> {
     const db = getFirebaseFirestore()
     const photoRef = doc(db, COLLECTIONS.PHOTOS, photoId)
     await updateDoc(photoRef, { ...data })
+}
+
+/**
+ * Promote a photo to a problem
+ */
+export async function promotePhotoToProblem(
+    photoId: string,
+    problemData: {
+        title: string
+        description: string
+        type: ProblemType
+        severity: ProblemSeverity
+        assignedTo?: string
+        dueDate?: Date
+    },
+    senderId: string
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    
+    // Get photo data
+    const photoRef = doc(db, COLLECTIONS.PHOTOS, photoId)
+    const photoSnap = await getDoc(photoRef)
+    
+    if (!photoSnap.exists()) {
+        throw new Error('Photo not found')
+    }
+    
+    const photoData = photoSnap.data()
+    const projectId = photoData.projectId
+    
+    // Create the problem with photo reference
+    const problemsRef = collection(db, COLLECTIONS.PROBLEMS)
+    const problemDoc = await addDoc(problemsRef, {
+        projectId,
+        senderId,
+        title: problemData.title,
+        description: problemData.description,
+        type: problemData.type,
+        severity: problemData.severity,
+        linkedPhotos: [photoId],
+        linkedDocuments: photoData.linkedDocuments || [],
+        locationX: photoData.gpsLongitude,
+        locationY: photoData.gpsLatitude,
+        assignedTo: problemData.assignedTo || null,
+        dueDate: problemData.dueDate || null,
+        createdAt: serverTimestamp(),
+    })
+    
+    // Update photo to mark it as promoted
+    await updateDoc(photoRef, {
+        promotedToProblem: true,
+        problemId: problemDoc.id,
+    })
+    
+    return problemDoc.id
 }
 
 /**
@@ -1891,6 +2153,7 @@ export async function getProblemsByProject(projectId: string): Promise<ProjectPr
             title: data.title,
             description: data.description || '',
             severity: data.severity,
+            linkedDocuments: data.linkedDocuments || [],
             createdAt: data.createdAt?.toDate() || new Date(),
         } as ProjectProblem
     })
@@ -1915,19 +2178,46 @@ export async function createProblem(
         senderId,
         title: data.title,
         description: data.description,
+        type: data.type || 'quality',
         severity: data.severity,
+        linkedDocuments: data.linkedDocuments || [],
+        linkedPhotos: data.linkedPhotos || [],
+        locationX: data.locationX,
+        locationY: data.locationY,
+        dueDate: data.dueDate,
+        assignedTo: data.assignedTo,
         createdAt: serverTimestamp(),
     })
+
+    // Create notification if assigned to someone
+    if (data.assignedTo && data.assignedTo !== senderId) {
+        try {
+            const senderProfile = await getUserProfile(senderId)
+            const senderName = senderProfile ? `${senderProfile.firstName} ${senderProfile.lastName}` : 'Quelqu\'un'
+            
+            await createNotification(data.assignedTo, {
+                userId: data.assignedTo,
+                type: 'problem_assigned',
+                title: 'Nouveau problème assigné',
+                message: `${senderName} vous a assigné un problème: "${data.title}"`,
+                projectId,
+                problemId: docRef.id,
+                createdBy: senderId,
+            })
+        } catch (notifError) {
+            console.warn('Failed to create notification:', notifError)
+        }
+    }
 
     return docRef.id
 }
 
 /**
- * Update a project problem (title, description, severity)
+ * Update a project problem (title, description, severity, type, assignedTo, dueDate)
  */
 export async function updateProblem(
     problemId: string,
-    data: { title?: string; description?: string; severity?: ProblemSeverity }
+    data: { title?: string; description?: string; severity?: ProblemSeverity; type?: ProblemType; assignedTo?: string; dueDate?: Date }
 ): Promise<void> {
     const db = getFirebaseFirestore()
     const problemRef = doc(db, COLLECTIONS.PROBLEMS, problemId)
@@ -1964,6 +2254,7 @@ export async function getRFIsByProject(projectId: string): Promise<ProjectRFI[]>
             senderId: data.senderId,
             title: data.title,
             question: data.question || '',
+            linkedDocuments: data.linkedDocuments || [],
             createdAt: data.createdAt?.toDate() || new Date(),
         } as ProjectRFI
     })
@@ -1988,22 +2279,54 @@ export async function createRFI(
         senderId,
         title: data.title,
         question: data.question,
+        linkedDocuments: data.linkedDocuments || [],
+        status: data.status || 'open',
+        assignedTo: data.assignedTo || null,
+        dueDate: data.dueDate ? Timestamp.fromDate(data.dueDate) : null,
         createdAt: serverTimestamp(),
     })
+
+    // Create notification if assigned to someone
+    if (data.assignedTo && data.assignedTo !== senderId) {
+        try {
+            const senderProfile = await getUserProfile(senderId)
+            const senderName = senderProfile ? `${senderProfile.firstName} ${senderProfile.lastName}` : 'Quelqu\'un'
+            
+            await createNotification(data.assignedTo, {
+                userId: data.assignedTo,
+                type: 'rfi_assigned',
+                title: 'Nouveau RFI assigné',
+                message: `${senderName} vous a assigné un RFI: "${data.title}"`,
+                projectId,
+                rfiId: docRef.id,
+                createdBy: senderId,
+            })
+        } catch (notifError) {
+            console.warn('Failed to create notification:', notifError)
+        }
+    }
 
     return docRef.id
 }
 
 /**
- * Update an RFI (title, question)
+ * Update an RFI (title, question, assignedTo, dueDate)
  */
 export async function updateRFI(
     rfiId: string,
-    data: { title?: string; question?: string }
+    data: { title?: string; question?: string; assignedTo?: string | null; dueDate?: Date | null }
 ): Promise<void> {
     const db = getFirebaseFirestore()
     const rfiRef = doc(db, COLLECTIONS.RFIS, rfiId)
-    await updateDoc(rfiRef, { ...data })
+    
+    const updateData: any = { ...data }
+    if (data.dueDate) {
+        updateData.dueDate = Timestamp.fromDate(data.dueDate)
+    } else if (data.dueDate === null) {
+        updateData.dueDate = null
+    }
+    
+    await updateDoc(rfiRef, updateData)
 }
 
 /**
@@ -2013,6 +2336,346 @@ export async function deleteRFI(rfiId: string): Promise<void> {
     const db = getFirebaseFirestore()
     const rfiRef = doc(db, COLLECTIONS.RFIS, rfiId)
     await deleteDoc(rfiRef)
+}
+
+// ========================================
+// RFI Comments (Thread) Functions
+// ========================================
+
+export interface RFIComment {
+    id: string
+    rfiId: string
+    senderId: string
+    message: string
+    linkedDocumentUrl?: string
+    linkedDocumentName?: string
+    createdAt: Date
+}
+
+/**
+ * Add a comment to an RFI (thread response)
+ */
+export async function addRFIComment(
+    rfiId: string,
+    senderId: string,
+    message: string,
+    linkedDocument?: { url: string; name: string }
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const commentsRef = collection(db, COLLECTIONS.RFI_COMMENTS)
+
+    const docRef = await addDoc(commentsRef, {
+        rfiId,
+        senderId,
+        message,
+        linkedDocumentUrl: linkedDocument?.url || null,
+        linkedDocumentName: linkedDocument?.name || null,
+        createdAt: serverTimestamp(),
+    })
+
+    // Notify the RFI creator and assigned user
+    try {
+        const rfiRef = doc(db, COLLECTIONS.RFIS, rfiId)
+        const rfiSnap = await getDoc(rfiRef)
+        if (rfiSnap.exists()) {
+            const rfiData = rfiSnap.data()
+            const senderProfile = await getUserProfile(senderId)
+            const senderName = senderProfile ? `${senderProfile.firstName} ${senderProfile.lastName}` : 'Quelqu\'un'
+
+            // Notify RFI creator if not the commenter
+            if (rfiData.senderId !== senderId) {
+                await createNotification(rfiData.senderId, {
+                    userId: rfiData.senderId,
+                    type: 'rfi_response',
+                    title: 'Nouvelle réponse sur votre RFI',
+                    message: `${senderName} a répondu à votre RFI: "${rfiData.title}"`,
+                    projectId: rfiData.projectId,
+                    rfiId,
+                    createdBy: senderId,
+                })
+            }
+
+            // Notify assigned user if not the commenter and not the creator
+            if (rfiData.assignedTo && rfiData.assignedTo !== senderId && rfiData.assignedTo !== rfiData.senderId) {
+                await createNotification(rfiData.assignedTo, {
+                    userId: rfiData.assignedTo,
+                    type: 'rfi_response',
+                    title: 'Nouvelle réponse sur un RFI',
+                    message: `${senderName} a répondu au RFI: "${rfiData.title}"`,
+                    projectId: rfiData.projectId,
+                    rfiId,
+                    createdBy: senderId,
+                })
+            }
+        }
+    } catch (notifError) {
+        console.warn('Failed to create notification:', notifError)
+    }
+
+    return docRef.id
+}
+
+/**
+ * Get all comments for an RFI (thread)
+ */
+export async function getRFIComments(rfiId: string): Promise<RFIComment[]> {
+    const db = getFirebaseFirestore()
+    const commentsRef = collection(db, COLLECTIONS.RFI_COMMENTS)
+    const q = query(
+        commentsRef,
+        where('rfiId', '==', rfiId),
+        firestoreOrderBy('createdAt', 'asc')
+    )
+    const querySnapshot = await getDocs(q)
+
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            rfiId: data.rfiId,
+            senderId: data.senderId,
+            message: data.message,
+            linkedDocumentUrl: data.linkedDocumentUrl,
+            linkedDocumentName: data.linkedDocumentName,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as RFIComment
+    })
+}
+
+/**
+ * Delete a comment from an RFI (only by the comment author)
+ */
+export async function deleteRFIComment(commentId: string, userId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const commentRef = doc(db, COLLECTIONS.RFI_COMMENTS, commentId)
+    
+    // Verify the user is the author before deleting
+    const commentSnap = await getDoc(commentRef)
+    if (!commentSnap.exists()) {
+        throw new Error('Comment not found')
+    }
+    
+    const commentData = commentSnap.data()
+    if (commentData.senderId !== userId) {
+        throw new Error('Vous ne pouvez supprimer que vos propres commentaires')
+    }
+    
+    await deleteDoc(commentRef)
+}
+
+/**
+ * Update a comment from an RFI (only by the comment author)
+ */
+export async function updateRFIComment(
+    commentId: string,
+    userId: string,
+    newMessage: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const commentRef = doc(db, COLLECTIONS.RFI_COMMENTS, commentId)
+    
+    // Verify the user is the author before updating
+    const commentSnap = await getDoc(commentRef)
+    if (!commentSnap.exists()) {
+        throw new Error('Comment not found')
+    }
+    
+    const commentData = commentSnap.data()
+    if (commentData.senderId !== userId) {
+        throw new Error('Vous ne pouvez modifier que vos propres commentaires')
+    }
+    
+    await updateDoc(commentRef, {
+        message: newMessage,
+        updatedAt: serverTimestamp(),
+    })
+}
+
+// ========================================
+// Document Linked Items Functions
+// ========================================
+
+/**
+ * Close an RFI - can only be done when a new version of the linked document is validated
+ */
+export async function closeRFI(
+    rfiId: string,
+    closedBy: string,
+    closingDocumentVersion?: number
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const rfiRef = doc(db, COLLECTIONS.RFIS, rfiId)
+    
+    await updateDoc(rfiRef, {
+        status: 'closed',
+        closedBy,
+        closedAt: serverTimestamp(),
+        closingDocumentVersion: closingDocumentVersion || null,
+    })
+}
+
+/**
+ * Get RFIs linked to a specific document
+ */
+export async function getRFIsByLinkedDocument(documentId: string): Promise<ProjectRFI[]> {
+    const db = getFirebaseFirestore()
+    const rfisRef = collection(db, COLLECTIONS.RFIS)
+    const q = query(rfisRef, where('linkedDocuments', 'array-contains', documentId))
+    const querySnapshot = await getDocs(q)
+
+    const rfis = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            title: data.title,
+            question: data.question || '',
+            linkedDocuments: data.linkedDocuments || [],
+            status: data.status || 'open',
+            closedAt: data.closedAt?.toDate(),
+            closedBy: data.closedBy,
+            closingDocumentVersion: data.closingDocumentVersion,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectRFI
+    })
+
+    return rfis.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Get Problems linked to a specific document
+ */
+export async function getProblemsByLinkedDocument(documentId: string): Promise<ProjectProblem[]> {
+    const db = getFirebaseFirestore()
+    const problemsRef = collection(db, COLLECTIONS.PROBLEMS)
+    const q = query(problemsRef, where('linkedDocuments', 'array-contains', documentId))
+    const querySnapshot = await getDocs(q)
+
+    const problems = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            title: data.title,
+            description: data.description || '',
+            type: data.type || 'quality',
+            severity: data.severity,
+            linkedDocuments: data.linkedDocuments || [],
+            linkedPhotos: data.linkedPhotos || [],
+            locationX: data.locationX,
+            locationY: data.locationY,
+            dueDate: data.dueDate?.toDate(),
+            assignedTo: data.assignedTo,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectProblem
+    })
+
+    return problems.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Get all Photos linked to a specific document (if photos have linkedDocuments field)
+ * Note: Photos may not have linkedDocuments by default, this is for future use
+ */
+export async function getPhotosByLinkedDocument(documentId: string): Promise<ProjectPhoto[]> {
+    const db = getFirebaseFirestore()
+    const photosRef = collection(db, COLLECTIONS.PHOTOS)
+    const q = query(photosRef, where('linkedDocuments', 'array-contains', documentId))
+    const querySnapshot = await getDocs(q)
+
+    const photos = querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            projectId: data.projectId,
+            senderId: data.senderId,
+            imageUrl: data.imageUrl,
+            note: data.note || '',
+            linkedDocuments: data.linkedDocuments || [],
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ProjectPhoto
+    })
+
+    return photos.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+/**
+ * Link a photo to a document (plan)
+ * Creates a bidirectional link between photo and document
+ */
+export async function linkPhotoToDocument(
+    photoId: string,
+    documentId: string,
+    linkedBy: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    
+    // Add document to photo's linkedDocuments
+    const photoRef = doc(db, COLLECTIONS.PHOTOS, photoId)
+    const photoSnap = await getDoc(photoRef)
+    if (!photoSnap.exists()) throw new Error('Photo not found')
+    
+    const photoData = photoSnap.data()
+    const currentLinkedDocs = photoData.linkedDocuments || []
+    if (!currentLinkedDocs.includes(documentId)) {
+        await updateDoc(photoRef, {
+            linkedDocuments: [...currentLinkedDocs, documentId],
+            updatedAt: serverTimestamp(),
+        })
+    }
+    
+    // Add photo to document's linkedPhotos
+    const documentRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    const docSnap = await getDoc(documentRef)
+    if (!docSnap.exists()) throw new Error('Document not found')
+    
+    const docData = docSnap.data()
+    const currentLinkedPhotos = docData.linkedPhotos || []
+    if (!currentLinkedPhotos.includes(photoId)) {
+        await updateDoc(documentRef, {
+            linkedPhotos: [...currentLinkedPhotos, photoId],
+            updatedAt: serverTimestamp(),
+        })
+    }
+    
+    // Log the link creation
+    console.log(`Photo ${photoId} linked to document ${documentId} by ${linkedBy}`)
+}
+
+/**
+ * Unlink a photo from a document
+ */
+export async function unlinkPhotoFromDocument(
+    photoId: string,
+    documentId: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    
+    // Remove document from photo's linkedDocuments
+    const photoRef = doc(db, COLLECTIONS.PHOTOS, photoId)
+    const photoSnap = await getDoc(photoRef)
+    if (photoSnap.exists()) {
+        const photoData = photoSnap.data()
+        const currentLinkedDocs = photoData.linkedDocuments || []
+        await updateDoc(photoRef, {
+            linkedDocuments: currentLinkedDocs.filter((id: string) => id !== documentId),
+            updatedAt: serverTimestamp(),
+        })
+    }
+    
+    // Remove photo from document's linkedPhotos
+    const documentRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    const docSnap = await getDoc(documentRef)
+    if (docSnap.exists()) {
+        const docData = docSnap.data()
+        const currentLinkedPhotos = docData.linkedPhotos || []
+        await updateDoc(documentRef, {
+            linkedPhotos: currentLinkedPhotos.filter((id: string) => id !== photoId),
+            updatedAt: serverTimestamp(),
+        })
+    }
 }
 
 // ========================================
@@ -2668,6 +3331,7 @@ export async function addTaskToProject(
     if (taskData.assigneeId && taskData.assigneeId !== '') {
         try {
             await createNotification(taskData.assigneeId, {
+                userId: taskData.assigneeId,
                 title: 'Nouvelle tâche assignée',
                 message: `Vous avez été assigné à la tâche : ${taskData.title}`,
                 type: 'task_assigned',
@@ -2843,20 +3507,36 @@ export async function getUsersByName(searchTerm: string): Promise<Array<{ id: st
 export async function createNotification(
     userId: string,
     notificationData: {
+        userId?: string
         title: string
         message: string
-        type: 'task_assigned' | 'task_updated' | 'task_completed' | 'project_updated' | 'plan_change_request' | 'plan_change_approved' | 'plan_change_rejected' | 'plan_change_expired'
+        type: 'task_assigned' | 'task_updated' | 'task_completed' | 'project_updated' | 'plan_change_request' | 'plan_change_approved' | 'plan_change_rejected' | 'plan_change_expired' | 'rfi_assigned' | 'problem_assigned' | 'rfi_response' | 'document_approved' | 'document_rejected' | 'mention'
         relatedId?: string
-        relatedType?: 'task' | 'project'
+        relatedType?: 'task' | 'project' | 'rfi' | 'problem' | 'document'
         actionUrl?: string
+        projectId?: string
+        rfiId?: string
+        problemId?: string
+        documentId?: string
+        createdBy?: string
     }
 ): Promise<string> {
     const db = getFirebaseFirestore()
-    const notificationsRef = collection(db, 'notifications')
+    const notificationsRef = collection(db, COLLECTIONS.NOTIFICATIONS)
     
     const notificationDoc = await addDoc(notificationsRef, {
-        userId,
-        ...notificationData,
+        targetUserId: userId,
+        title: notificationData.title,
+        message: notificationData.message,
+        type: notificationData.type,
+        relatedId: notificationData.relatedId,
+        relatedType: notificationData.relatedType,
+        actionUrl: notificationData.actionUrl,
+        projectId: notificationData.projectId,
+        rfiId: notificationData.rfiId,
+        problemId: notificationData.problemId,
+        documentId: notificationData.documentId,
+        createdBy: notificationData.createdBy,
         read: false,
         createdAt: serverTimestamp(),
     })
@@ -2864,17 +3544,21 @@ export async function createNotification(
     return notificationDoc.id
 }
 
+// Alias for compatibility with older components
+export const getUserNotifications = getNotificationsByUser
+export const getUnreadNotificationsCount = getUnreadNotificationCount
+
 /**
  * Get notifications for a user
  */
-export async function getUserNotifications(userId: string, limit: number = 50): Promise<any[]> {
+export async function getNotificationsByUser(userId: string): Promise<Notification[]> {
     const db = getFirebaseFirestore()
-    const notificationsRef = collection(db, 'notifications')
+    const notificationsRef = collection(db, COLLECTIONS.NOTIFICATIONS)
     const q = query(
         notificationsRef,
-        where('userId', '==', userId),
+        where('targetUserId', '==', userId),
         firestoreOrderBy('createdAt', 'desc'),
-        firestoreLimit(limit)
+        firestoreLimit(50)
     )
     
     const querySnapshot = await getDocs(q)
@@ -2882,37 +3566,519 @@ export async function getUserNotifications(userId: string, limit: number = 50): 
         const data = docSnap.data()
         return {
             id: docSnap.id,
-            ...data,
+            targetUserId: data.targetUserId,
+            title: data.title,
+            message: data.message,
+            type: data.type,
+            data: data.data || {},
+            targetRole: data.targetRole || 'admin',
+            relatedId: data.relatedId,
+            relatedType: data.relatedType,
+            actionUrl: data.actionUrl,
+            projectId: data.projectId,
+            rfiId: data.rfiId,
+            problemId: data.problemId,
+            documentId: data.documentId,
+            createdBy: data.createdBy,
+            read: data.read,
             createdAt: data.createdAt?.toDate() || new Date(),
-        }
+        } as Notification
     })
 }
 
 /**
- * Mark notification as read
+ * Get unread notification count for a user
  */
-export async function markNotificationAsRead(notificationId: string): Promise<void> {
+export async function getUnreadNotificationCount(userId: string): Promise<number> {
     const db = getFirebaseFirestore()
-    const notificationRef = doc(db, 'notifications', notificationId)
-    
-    await updateDoc(notificationRef, {
-        read: true,
-        readAt: serverTimestamp(),
-    })
-}
-
-/**
- * Get unread notifications count for a user
- */
-export async function getUnreadNotificationsCount(userId: string): Promise<number> {
-    const db = getFirebaseFirestore()
-    const notificationsRef = collection(db, 'notifications')
+    const notificationsRef = collection(db, COLLECTIONS.NOTIFICATIONS)
     const q = query(
         notificationsRef,
-        where('userId', '==', userId),
+        where('targetUserId', '==', userId),
         where('read', '==', false)
     )
     
     const querySnapshot = await getDocs(q)
     return querySnapshot.size
+}
+
+/**
+ * Mark a notification as read
+ */
+export async function markNotificationAsRead(notificationId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const notificationRef = doc(db, COLLECTIONS.NOTIFICATIONS, notificationId)
+    await updateDoc(notificationRef, { read: true })
+}
+
+/**
+ * Mark all notifications as read for a user
+ */
+export async function markAllNotificationsAsRead(userId: string): Promise<void> {
+    const db = getFirebaseFirestore()
+    const notificationsRef = collection(db, COLLECTIONS.NOTIFICATIONS)
+    const q = query(
+        notificationsRef,
+        where('targetUserId', '==', userId),
+        where('read', '==', false)
+    )
+    
+    const querySnapshot = await getDocs(q)
+    const updatePromises = querySnapshot.docs.map(docSnap =>
+        updateDoc(doc(db, COLLECTIONS.NOTIFICATIONS, docSnap.id), { read: true })
+    )
+    
+    await Promise.all(updatePromises)
+}
+
+// ========================================
+// Storage Functions
+// ========================================
+
+/**
+ * Update enterprise storage usage
+ * Called when uploading or deleting files
+ * @param enterpriseId Enterprise ID
+ * @param sizeChange Size change in bytes (positive for upload, negative for delete)
+ */
+export async function updateEnterpriseStorage(
+    enterpriseId: string,
+    sizeChange: number
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const enterpriseRef = doc(db, COLLECTIONS.ENTERPRISES, enterpriseId)
+    
+    // Get current storage
+    const enterpriseSnap = await getDoc(enterpriseRef)
+    if (!enterpriseSnap.exists()) {
+        throw new Error('Enterprise not found')
+    }
+    
+    const currentStorage = enterpriseSnap.data().storageUsed || 0
+    const newStorage = Math.max(0, currentStorage + sizeChange)
+    
+    await updateDoc(enterpriseRef, {
+        storageUsed: newStorage,
+        updatedAt: serverTimestamp()
+    })
+}
+
+// ========================================
+// Storage Recalculation Function
+// ========================================
+
+/**
+ * Recalculate and sync enterprise storage from all documents
+ * This function sums up all document file sizes and updates the enterprise storageUsed
+ * @param enterpriseId Enterprise ID
+ * @returns Total storage used in bytes
+ */
+export async function recalculateEnterpriseStorage(enterpriseId: string): Promise<number> {
+    const db = getFirebaseFirestore()
+    
+    // Get all projects for this enterprise
+    const projects = await getProjectsByEnterprise(enterpriseId)
+    let totalStorage = 0
+    
+    // Sum up all documents from all projects
+    for (const project of projects) {
+        const documents = await getDocumentsByProject(project.id)
+        for (const doc of documents) {
+            totalStorage += doc.fileSize || 0
+        }
+    }
+    
+    // Update enterprise storage in Firestore
+    const enterpriseRef = doc(db, COLLECTIONS.ENTERPRISES, enterpriseId)
+    await updateDoc(enterpriseRef, {
+        storageUsed: totalStorage,
+        updatedAt: serverTimestamp()
+    })
+    
+    console.log('🔄 Storage recalculated for enterprise:', enterpriseId, 'Total:', totalStorage, 'bytes')
+    return totalStorage
+}
+
+// ========================================
+// Document Approval Workflow
+// ========================================
+
+/**
+ * Create an approval request for a document
+ */
+export async function createApprovalRequest(
+    projectId: string,
+    documentId: string,
+    requesterId: string,
+    approverId: string
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const approvalsRef = collection(db, COLLECTIONS.APPROVALS)
+    
+    const docRef = await addDoc(approvalsRef, {
+        projectId,
+        documentId,
+        requesterId,
+        approverId,
+        status: 'pending',
+        comment: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    })
+    
+    return docRef.id
+}
+
+/**
+ * Get all pending approvals for an approver
+ */
+export async function getPendingApprovals(approverId: string): Promise<DocumentApproval[]> {
+    const db = getFirebaseFirestore()
+    const approvalsRef = collection(db, COLLECTIONS.APPROVALS)
+    const q = query(
+        approvalsRef,
+        where('approverId', '==', approverId),
+        where('status', '==', 'pending')
+    )
+    const querySnapshot = await getDocs(q)
+    
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            documentId: data.documentId,
+            projectId: data.projectId,
+            requesterId: data.requesterId,
+            approverId: data.approverId,
+            status: data.status,
+            comment: data.comment || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as DocumentApproval
+    })
+}
+
+/**
+ * Approve or reject a document
+ */
+export async function updateApprovalStatus(
+    approvalId: string,
+    status: ApprovalStatus,
+    comment?: string
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const approvalRef = doc(db, COLLECTIONS.APPROVALS, approvalId)
+    
+    await updateDoc(approvalRef, {
+        status,
+        comment: comment || null,
+        updatedAt: serverTimestamp(),
+    })
+    
+    // If approved, also update the document status to S4
+    if (status === 'approved') {
+        const approvalSnap = await getDoc(approvalRef)
+        if (approvalSnap.exists()) {
+            const data = approvalSnap.data()
+            const documentRef = doc(db, COLLECTIONS.DOCUMENTS, data.documentId)
+            await updateDoc(documentRef, {
+                status: 's4',
+                updatedAt: serverTimestamp(),
+            })
+        }
+    }
+}
+
+/**
+ * Approve or reject a document with history tracking and review step
+ * Enhanced ISO 19650 workflow with auto-problem creation on rejection
+ */
+export async function updateApprovalStatusWithHistory(
+    approvalId: string,
+    status: ApprovalStatus,
+    actorId: string,
+    actorName: string,
+    comment?: string,
+    annotations?: PDFAnnotation[]
+): Promise<{ problemId?: string }> {
+    const db = getFirebaseFirestore()
+    const approvalRef = doc(db, COLLECTIONS.APPROVALS, approvalId)
+    
+    // Get current approval data for history
+    const approvalSnap = await getDoc(approvalRef)
+    if (!approvalSnap.exists()) {
+        throw new Error('Approval request not found')
+    }
+    const approvalData = approvalSnap.data()
+    const previousStatus = approvalData.status
+    
+    // Update approval status
+    await updateDoc(approvalRef, {
+        status,
+        comment: comment || null,
+        reviewStep: annotations ? {
+            id: crypto.randomUUID(),
+            approvalId,
+            reviewerId: actorId,
+            comment: comment || '',
+            annotations,
+            createdAt: serverTimestamp()
+        } : null,
+        updatedAt: serverTimestamp(),
+    })
+    
+    // Log approval history
+    const historyRef = collection(db, COLLECTIONS.APPROVAL_HISTORY)
+    await addDoc(historyRef, {
+        documentId: approvalData.documentId,
+        projectId: approvalData.projectId,
+        action: status === 'approved' ? 'approved' : 'rejected',
+        actorId,
+        actorName,
+        comment: comment || '',
+        previousStatus,
+        newStatus: status,
+        createdAt: serverTimestamp(),
+    })
+    
+    // Update document status
+    const documentRef = doc(db, COLLECTIONS.DOCUMENTS, approvalData.documentId)
+    let newDocStatus: DocumentStatus
+    
+    if (status === 'approved') {
+        newDocStatus = 's4' // Approved for construction
+    } else {
+        newDocStatus = 'cr' // Clarification required (rejected)
+    }
+    
+    await updateDoc(documentRef, {
+        status: newDocStatus,
+        updatedAt: serverTimestamp(),
+    })
+    
+    // If rejected (CR status), auto-create a problem linked to this document
+    let problemId: string | undefined
+    if (status === 'rejected') {
+        const problemsRef = collection(db, COLLECTIONS.PROBLEMS)
+        const problemDoc = await addDoc(problemsRef, {
+            projectId: approvalData.projectId,
+            senderId: actorId,
+            title: `Rejet de document: ${approvalData.documentTitle || 'Sans titre'}`,
+            description: `Document rejeté lors de l'approbation.\n\nCommentaire de l'approbateur: ${comment || 'Aucun commentaire'}`,
+            severity: 'major' as ProblemSeverity,
+            type: 'quality' as ProblemType,
+            linkedDocuments: [approvalData.documentId],
+            dueDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days
+            assignedTo: approvalData.requesterId,
+            createdAt: serverTimestamp(),
+        })
+        problemId = problemDoc.id
+    }
+    
+    return { problemId }
+}
+
+/**
+ * Get approval history for a document
+ */
+export async function getDocumentApprovalHistory(documentId: string): Promise<ApprovalHistory[]> {
+    const db = getFirebaseFirestore()
+    const historyRef = collection(db, COLLECTIONS.APPROVAL_HISTORY)
+    const q = query(
+        historyRef,
+        where('documentId', '==', documentId),
+        firestoreOrderBy('createdAt', 'desc')
+    )
+    
+    const querySnapshot = await getDocs(q)
+    
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            documentId: data.documentId,
+            projectId: data.projectId,
+            action: data.action,
+            actorId: data.actorId,
+            actorName: data.actorName || '',
+            comment: data.comment || '',
+            previousStatus: data.previousStatus,
+            newStatus: data.newStatus,
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as ApprovalHistory
+    })
+}
+
+/**
+ * Add a review step to an existing approval with annotations
+ */
+export async function addReviewStep(
+    approvalId: string,
+    reviewerId: string,
+    comment: string,
+    annotations?: PDFAnnotation[]
+): Promise<void> {
+    const db = getFirebaseFirestore()
+    const approvalRef = doc(db, COLLECTIONS.APPROVALS, approvalId)
+    
+    const approvalSnap = await getDoc(approvalRef)
+    if (!approvalSnap.exists()) {
+        throw new Error('Approval request not found')
+    }
+    
+    const approvalData = approvalSnap.data()
+    
+    // Update approval with review step
+    await updateDoc(approvalRef, {
+        reviewStep: {
+            id: crypto.randomUUID(),
+            approvalId,
+            reviewerId,
+            comment,
+            annotations: annotations || [],
+            createdAt: serverTimestamp(),
+        },
+        updatedAt: serverTimestamp(),
+    })
+    
+    // Log to history
+    const historyRef = collection(db, COLLECTIONS.APPROVAL_HISTORY)
+    await addDoc(historyRef, {
+        documentId: approvalData.documentId,
+        projectId: approvalData.projectId,
+        action: 'reviewed',
+        actorId: reviewerId,
+        comment,
+        previousStatus: approvalData.status,
+        newStatus: approvalData.status, // Status doesn't change during review
+        createdAt: serverTimestamp(),
+    })
+}
+
+/**
+ * Get all approvals pending for a specific approver (dashboard view)
+ */
+export async function getPendingApprovalsForApprover(approverId: string): Promise<DocumentApproval[]> {
+    const db = getFirebaseFirestore()
+    const approvalsRef = collection(db, COLLECTIONS.APPROVALS)
+    const q = query(
+        approvalsRef,
+        where('approverId', '==', approverId),
+        where('status', 'in', ['pending', 'reviewed'])
+    )
+    
+    const querySnapshot = await getDocs(q)
+    
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            documentId: data.documentId,
+            projectId: data.projectId,
+            requesterId: data.requesterId,
+            approverId: data.approverId,
+            status: data.status,
+            comment: data.comment || '',
+            reviewStep: data.reviewStep,
+            createdAt: data.createdAt?.toDate() || new Date(),
+            updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as DocumentApproval
+    }).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+}
+
+// ========================================
+// Document Versioning
+// ========================================
+
+/**
+ * Create a new version for a document
+ */
+export async function createDocumentVersion(
+    projectId: string,
+    documentId: string,
+    uploadedBy: string,
+    data: CreateVersionData
+): Promise<string> {
+    const db = getFirebaseFirestore()
+    const versionsRef = collection(db, COLLECTIONS.DOCUMENT_VERSIONS)
+    
+    // Get current version number
+    const versionsQuery = query(
+        versionsRef,
+        where('documentId', '==', documentId),
+        firestoreOrderBy('versionNumber', 'desc')
+    )
+    const versionsSnap = await getDocs(versionsQuery)
+    const nextVersion = versionsSnap.empty ? 1 : (versionsSnap.docs[0].data().versionNumber + 1)
+    
+    const docRef = await addDoc(versionsRef, {
+        projectId,
+        documentId,
+        uploadedBy,
+        versionNumber: nextVersion,
+        fileUrl: data.fileUrl,
+        fileSize: data.fileSize,
+        comment: data.comment || null,
+        createdAt: serverTimestamp(),
+    })
+    
+    // Update the main document with new fileUrl and version
+    const documentRef = doc(db, COLLECTIONS.DOCUMENTS, documentId)
+    await updateDoc(documentRef, {
+        fileUrl: data.fileUrl,
+        fileSize: data.fileSize,
+        version: nextVersion,
+        updatedAt: serverTimestamp(),
+    })
+    
+    return docRef.id
+}
+
+/**
+ * Get all versions for a document
+ */
+export async function getDocumentVersions(documentId: string): Promise<DocumentVersion[]> {
+    const db = getFirebaseFirestore()
+    const versionsRef = collection(db, COLLECTIONS.DOCUMENT_VERSIONS)
+    const q = query(versionsRef, where('documentId', '==', documentId), firestoreOrderBy('versionNumber', 'desc'))
+    const querySnapshot = await getDocs(q)
+    
+    return querySnapshot.docs.map(docSnap => {
+        const data = docSnap.data()
+        return {
+            id: docSnap.id,
+            documentId: data.documentId,
+            projectId: data.projectId,
+            uploadedBy: data.uploadedBy,
+            versionNumber: data.versionNumber,
+            fileUrl: data.fileUrl,
+            fileSize: data.fileSize,
+            comment: data.comment || '',
+            createdAt: data.createdAt?.toDate() || new Date(),
+        } as DocumentVersion
+    })
+}
+
+/**
+ * Get a specific version by ID
+ */
+export async function getDocumentVersion(versionId: string): Promise<DocumentVersion | null> {
+    const db = getFirebaseFirestore()
+    const versionRef = doc(db, COLLECTIONS.DOCUMENT_VERSIONS, versionId)
+    const versionSnap = await getDoc(versionRef)
+    
+    if (!versionSnap.exists()) return null
+    
+    const data = versionSnap.data()
+    return {
+        id: versionSnap.id,
+        documentId: data.documentId,
+        projectId: data.projectId,
+        uploadedBy: data.uploadedBy,
+        versionNumber: data.versionNumber,
+        fileUrl: data.fileUrl,
+        fileSize: data.fileSize,
+        comment: data.comment || '',
+        createdAt: data.createdAt?.toDate() || new Date(),
+    } as DocumentVersion
 }

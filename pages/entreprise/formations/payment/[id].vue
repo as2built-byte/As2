@@ -221,7 +221,7 @@ onMounted(() => {
                     <div class="flex items-center justify-between">
                         <div class="flex items-center gap-3">
                             <img 
-                                src="~/assets/images/algeriepost.jpg" 
+                                src="/images/algeriepost.jpg" 
                                 alt="Algérie Poste"
                                 class="h-10 object-contain bg-white rounded-lg p-1"
                             />

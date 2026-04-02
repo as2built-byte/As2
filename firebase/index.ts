@@ -32,7 +32,6 @@ export function getFirebaseApp(): FirebaseApp {
 
 // Re-export config utilities
 export { getFirebaseConfig, setFirebaseConfig } from './config'
-export type { FirebaseConfig } from './config'
 
 // Re-export all services
 export * from './services'

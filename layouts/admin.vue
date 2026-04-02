@@ -52,6 +52,7 @@ const navigation = {
         { path: '/admin/projets', label: 'Projets', icon: 'heroicons:folder-open', disabled: false },
         { path: '/admin/missions', label: 'Missions', icon: 'heroicons:briefcase', disabled: false },
         { path: '/admin/formations', label: 'Formations', icon: 'heroicons:academic-cap', disabled: false },
+        { path: '/admin/tutorials', label: 'Tutoriels', icon: 'heroicons:play-circle', disabled: false },
         { path: '/admin/audits', label: 'Audits', icon: 'heroicons:clipboard-document-check', disabled: false },
         { path: '/admin/messages', label: 'Messages', icon: 'heroicons:envelope', disabled: false }
     ],
@@ -100,6 +101,7 @@ const pageTitle = computed(() => {
     if (path.includes('/admin/projets')) return 'Projets'
     if (path.includes('/admin/missions')) return 'Missions'
     if (path.includes('/admin/formations')) return 'Formations'
+    if (path.includes('/admin/tutorials')) return 'Tutoriels'
     if (path.includes('/admin/audits')) return 'Audits'
     if (path.includes('/admin/transactions')) return 'Transactions'
     if (path.includes('/admin/messages')) return 'Messages de contact'

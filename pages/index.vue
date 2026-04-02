@@ -16,6 +16,10 @@ definePageMeta({
 const { user, profile } = useAuth()
 const router = useRouter()
 
+// Import du store de tutoriels vidéo
+const videoTutorialsStore = useVideoTutorialsStore()
+import type { VideoTutorial } from '~/types'
+
 // Protection pour le rendu serveur
 const isClient = process.client
 const isMounted = ref(false)
@@ -160,6 +164,22 @@ const whyBimItems = [
         { label: 'Interventions planifiées - Digital Twin', data: [8, 6, 9, 5, 7, 6], color: '#a855f7' }
       ]
     }
+  },
+  {
+    id: 'certifications',
+    title: 'Certifications',
+    icon: 'i-heroicons-check-badge',
+    color: 'yellow',
+    image: 'https://images.unsplash.com/photo-1567427017947-545c5f8d16ad?auto=format&fit=crop&q=80&w=400',
+    shortDesc: 'Accompagnement aux certifications environnementales et qualité. Référentiels LEED, BREEAM, HQE, R2S.',
+    fullDesc: 'Nous vous accompagnons dans la démarche de certification de vos projets. De la modélisation énergétique à l\'analyse du cycle de vie, nous optimisons vos bâtiments pour atteindre les standards internationaux les plus exigeants. Nos experts maîtrisent les référentiels LEED, BREEAM, HQE et R2S pour maximiser la valeur verte de vos actifs.',
+    simulationData: {
+      labels: ['Energie', 'Eau', 'Déchets', 'Matériaux', 'Confort'],
+      datasets: [
+        { label: 'Score avant certification', data: [45, 50, 40, 55, 48], color: '#64748b' },
+        { label: 'Score après optimisation', data: [85, 80, 90, 88, 92], color: '#eab308' }
+      ]
+    }
   }
 ]
 
@@ -188,6 +208,14 @@ const closeModals = () => {
   showSuccessModal.value = false
   selectedBimItem.value = null
 }
+
+// Stats data
+const stats = [
+  { value: '500+', label: 'Projets BIM' },
+  { value: '15+', label: 'Années d\'expérience' },
+  { value: '98%', label: 'Satisfaction client' },
+  { value: '24/7', label: 'Support technique' }
+]
 
 // Testimonials avec photos Unsplash réelles
 const testimonials = [
@@ -219,6 +247,7 @@ const menuItems = [
   { id: 'home', label: 'Home' },
   { id: 'about', label: 'About' },
   { id: 'services', label: 'Expertises' },
+  { id: 'tutorials', label: 'Tutoriels' },
   { id: 'why-bim', label: 'Why BIM?' },
   { id: 'contact', label: 'Contact' }
 ]
@@ -241,6 +270,7 @@ const contactForm = reactive({
 })
 
 const isSubmitting = ref(false)
+const contactFormSuccess = ref(false)
 
 // Helper for notifications
 const showNotification = (title: string, description: string, color: string) => {
@@ -302,8 +332,8 @@ const handleContactSubmit = async () => {
     contactForm.projectType = ''
     contactForm.message = ''
     
-    // Show success modal
-    showSuccessModal.value = true
+    // Show success message
+    contactFormSuccess.value = true
     
     // Show success notification
     showNotification('Message envoyé !', 'Nous vous répondrons sous 24h.', 'green')
@@ -346,10 +376,33 @@ const stopCarousel = () => {
   }
 }
 
+// Données pour les tutoriels vidéo
+const featuredTutorials = computed(() => {
+  return videoTutorialsStore.activeTutorials.slice(0, 3)
+})
+
+// Fonction pour ouvrir la vidéo dans une modal
+const selectedVideo = ref<VideoTutorial | null>(null)
+const showVideoModal = ref(false)
+
+const openVideoModal = (tutorial: VideoTutorial) => {
+  selectedVideo.value = tutorial
+  showVideoModal.value = true
+}
+
+const closeVideoModal = () => {
+  showVideoModal.value = false
+  selectedVideo.value = null
+}
+
 // Start carousel on mount
-onMounted(() => {
+onMounted(async () => {
   isMounted.value = true
   startCarousel()
+  
+  // Charger les tutoriels vidéo
+  await videoTutorialsStore.fetchTutorials()
+  
   if (user) {
     // User is authenticated, redirect to appropriate dashboard
     if (profile.value?.role === 'enterprise') {
@@ -374,8 +427,8 @@ onMounted(() => {
         <div class="flex items-center justify-between h-20">
           <!-- Logo -->
           <div class="flex items-center space-x-3 cursor-pointer" @click="scrollToSection('home')">
-            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
-              <Icon name="i-heroicons-cube" class="w-6 h-6 text-white" />
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg shadow-blue-500/30 overflow-hidden">
+              <img src="/images/logo.jpeg" alt="AS2BUILT" class="w-full h-full object-cover" />
             </div>
             <span class="text-2xl font-black tracking-tight text-white">AS2BUILT</span>
           </div>
@@ -708,7 +761,7 @@ onMounted(() => {
           <div class="group relative overflow-hidden rounded-2xl border border-slate-700/50 hover:border-cyan-500/50 transition-all duration-500 hover:shadow-2xl hover:shadow-cyan-500/10">
             <div class="absolute inset-0">
               <img 
-                src="https://images.unsplash.com/photo-1590644365607-1c5b91b2f74d?auto=format&fit=crop&q=80&w=600" 
+                src="https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&q=80&w=600" 
                 alt="Scan to BIM - Laser 3D"
                 class="w-full h-full object-cover opacity-30 group-hover:opacity-40 group-hover:scale-110 transition-all duration-700"
               />
@@ -764,7 +817,7 @@ onMounted(() => {
             </div>
             <div class="relative p-6 h-full flex flex-col">
               <div class="w-14 h-14 rounded-2xl bg-indigo-500/20 backdrop-blur-sm border border-indigo-500/30 flex items-center justify-center mb-4 group-hover:bg-indigo-500/30 transition-colors">
-                <Icon name="i-heroicons-certificate" class="w-7 h-7 text-indigo-400" />
+                <Icon name="i-heroicons-academic-cap" class="w-7 h-7 text-indigo-400" />
               </div>
               <h3 class="text-xl font-bold text-white mb-2">Certifications</h3>
               <p class="text-slate-400 text-sm leading-relaxed flex-grow">
@@ -795,8 +848,8 @@ onMounted(() => {
           </p>
         </div>
         
-        <!-- Why BIM grid - 4 points clés avec images -->
-        <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <!-- Why BIM grid - 5 points clés avec images -->
+        <div class="grid md:grid-cols-2 lg:grid-cols-5 gap-6">
           <UCard 
             v-for="item in whyBimItems" 
             :key="item.id"
@@ -812,9 +865,21 @@ onMounted(() => {
             </div>
             <div class="p-6 text-center">
               <div class="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4 transition-colors"
-                :class="`bg-${item.color}-500/20 group-hover:bg-${item.color}-500/30`"
+                :class="{
+                  'bg-green-500/20 group-hover:bg-green-500/30': item.color === 'green',
+                  'bg-blue-500/20 group-hover:bg-blue-500/30': item.color === 'blue',
+                  'bg-emerald-500/20 group-hover:bg-emerald-500/30': item.color === 'emerald',
+                  'bg-purple-500/20 group-hover:bg-purple-500/30': item.color === 'purple',
+                  'bg-yellow-500/20 group-hover:bg-yellow-500/30': item.color === 'yellow'
+                }"
               >
-                <Icon :name="item.icon" class="w-7 h-7" :class="`text-${item.color}-400`" />
+                <Icon :name="item.icon" class="w-7 h-7" :class="{
+                  'text-green-400': item.color === 'green',
+                  'text-blue-400': item.color === 'blue',
+                  'text-emerald-400': item.color === 'emerald',
+                  'text-purple-400': item.color === 'purple',
+                  'text-yellow-400': item.color === 'yellow'
+                }" />
               </div>
               <h3 class="text-lg font-bold text-white mb-2">{{ item.title }}</h3>
               <p class="text-slate-400 text-sm leading-relaxed mb-4">
@@ -849,6 +914,85 @@ onMounted(() => {
               </div>
             </div>
           </UCard>
+        </div>
+      </div>
+    </section>
+
+    <!-- Video Tutorials Section -->
+    <section id="tutorials" class="py-24 px-4 sm:px-6 lg:px-8 relative bg-slate-900/30">
+      <div class="max-w-7xl mx-auto">
+        <!-- Section header -->
+        <div class="text-center mb-16">
+          <div class="inline-flex items-center space-x-2 bg-purple-500/10 px-4 py-2 rounded-full mb-6">
+            <Icon name="i-heroicons-play-circle" class="w-5 h-5 text-purple-400" />
+            <span class="text-sm font-medium text-purple-400">Tutoriels Vidéo</span>
+          </div>
+          <h2 class="text-4xl lg:text-5xl font-bold mb-6">Apprenez le BIM avec nos experts</h2>
+          <p class="text-xl text-slate-400 max-w-3xl mx-auto">
+            Découvrez nos tutoriels vidéo pour maîtriser les meilleures pratiques BIM et optimiser vos workflows
+          </p>
+        </div>
+        
+        <!-- Featured tutorials grid -->
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8 mb-12">
+          <div 
+            v-for="tutorial in featuredTutorials" 
+            :key="tutorial.id"
+            class="group relative overflow-hidden rounded-2xl border border-slate-700/50 hover:border-purple-500/50 transition-all duration-500 hover:shadow-2xl hover:shadow-purple-500/10 cursor-pointer"
+            @click="openVideoModal(tutorial)"
+          >
+            <!-- Video thumbnail -->
+            <div class="relative aspect-video bg-slate-800">
+              <img 
+                :src="tutorial.thumbnailUrl"
+                :alt="tutorial.title"
+                class="w-full h-full object-cover opacity-80 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500"
+              />
+              <!-- Play button overlay -->
+              <div class="absolute inset-0 flex items-center justify-center">
+                <div class="w-16 h-16 rounded-full bg-purple-600/80 backdrop-blur-sm flex items-center justify-center group-hover:bg-purple-600 group-hover:scale-110 transition-all duration-300">
+                  <Icon name="i-heroicons-play" class="w-8 h-8 text-white ml-1" />
+                </div>
+              </div>
+              <!-- Duration badge -->
+              <div class="absolute bottom-3 right-3 px-2 py-1 bg-slate-900/80 backdrop-blur-sm rounded-lg text-xs text-white">
+                {{ tutorial.duration }}
+              </div>
+            </div>
+            
+            <!-- Content -->
+            <div class="p-6">
+              <div class="flex items-center gap-2 mb-3">
+                <span class="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full">
+                  {{ tutorial.platform }}
+                </span>
+                <span 
+                  v-for="tag in tutorial.tags.slice(0, 2)" 
+                  :key="tag"
+                  class="px-2 py-1 bg-slate-700/50 text-slate-300 text-xs rounded-full"
+                >
+                  {{ tag }}
+                </span>
+              </div>
+              <h3 class="text-xl font-bold text-white mb-2 group-hover:text-purple-400 transition-colors">
+                {{ tutorial.title }}
+              </h3>
+              <p class="text-slate-400 text-sm leading-relaxed line-clamp-2">
+                {{ tutorial.description }}
+              </p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- View all tutorials button -->
+        <div class="text-center">
+          <NuxtLink 
+            to="/tutorials"
+            class="inline-flex items-center px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-lg shadow-lg shadow-purple-500/30 transition-all duration-300 hover:scale-105"
+          >
+            Voir tous les tutoriels
+            <Icon name="i-heroicons-arrow-right" class="w-5 h-5 ml-2" />
+          </NuxtLink>
         </div>
       </div>
     </section>
@@ -917,7 +1061,7 @@ onMounted(() => {
               </NuxtLink>
               
               <!-- Register Card -->
-              <NuxtLink to="/login" class="group block">
+              <NuxtLink to="/register" class="group block">
                 <div class="p-6 rounded-xl bg-slate-800/50 border border-slate-700 hover:border-purple-500/50 transition-all h-full">
                   <div class="text-center mb-4">
                     <Icon name="i-heroicons-user-plus" class="w-10 h-10 text-purple-400 mx-auto mb-2" />
@@ -961,7 +1105,7 @@ onMounted(() => {
                 </div>
                 <div>
                   <p class="text-sm text-slate-400">Email</p>
-                  <p class="text-white font-medium">contact@as2built.com</p>
+                  <p class="text-white font-medium">info@as2built.com</p>
                 </div>
               </div>
               <div class="flex items-center space-x-4">
@@ -993,6 +1137,15 @@ onMounted(() => {
               <p class="text-slate-400 mb-6">
                 Remplissez le formulaire ci-dessous et nous vous répondrons sous 24h.
               </p>
+              
+              <!-- Success Message -->
+              <div v-if="contactFormSuccess" class="mb-6 p-4 rounded-lg bg-emerald-900/20 border border-emerald-500/30 text-emerald-300 flex items-start gap-3">
+                <Icon name="i-heroicons-check-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p class="font-medium">Message envoyé avec succès !</p>
+                  <p class="text-sm text-emerald-400/80">Notre équipe vous contactera sous peu.</p>
+                </div>
+              </div>
               
               <form @submit.prevent="handleContactSubmit" class="space-y-5">
                 <!-- Ligne 1: Nom et Email -->
@@ -1090,8 +1243,8 @@ onMounted(() => {
           <!-- Logo & Description -->
           <div class="md:col-span-2">
             <div class="flex items-center space-x-2 mb-4">
-              <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                <Icon name="i-heroicons-cube" class="w-5 h-5 text-white" />
+              <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center overflow-hidden">
+                <img src="/images/logo.jpeg" alt="AS2BUILT" class="w-full h-full object-cover" />
               </div>
               <span class="text-xl font-bold text-white">AS2BUILT</span>
             </div>
@@ -1100,22 +1253,11 @@ onMounted(() => {
             </p>
           </div>
           
-          <!-- Quick Links -->
-          <div>
-            <h4 class="font-semibold text-white mb-4">Liens rapides</h4>
-            <ul class="space-y-2 text-sm">
-              <li><button @click="scrollToSection('home')" class="text-slate-400 hover:text-white transition-colors">Home</button></li>
-              <li><button @click="scrollToSection('about')" class="text-slate-400 hover:text-white transition-colors">About</button></li>
-              <li><button @click="scrollToSection('services')" class="text-slate-400 hover:text-white transition-colors">Services</button></li>
-              <li><button @click="scrollToSection('why-bim')" class="text-slate-400 hover:text-white transition-colors">Why BIM?</button></li>
-            </ul>
-          </div>
-          
           <!-- Contact -->
           <div>
             <h4 class="font-semibold text-white mb-4">Contact</h4>
             <ul class="space-y-2 text-sm text-slate-400">
-              <li>contact@as2built.com</li>
+              <li>info@as2built.com</li>
               <li>+213549654828</li>
               <li>Alger, Algérie</li>
             </ul>
@@ -1135,6 +1277,80 @@ onMounted(() => {
         </div>
       </div>
     </footer>
+
+    <!-- Video Modal -->
+    <UModal v-model="showVideoModal" :ui="{ width: 'max-w-4xl' }">
+      <UCard v-if="selectedVideo">
+        <template #header>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-12 h-12 rounded-xl bg-purple-500/20 flex items-center justify-center">
+                <Icon name="i-heroicons-play-circle" class="w-6 h-6 text-purple-400" />
+              </div>
+              <div>
+                <h3 class="text-xl font-bold text-white">{{ selectedVideo.title }}</h3>
+                <p class="text-sm text-slate-400">{{ selectedVideo.duration }} • {{ selectedVideo.platform }}</p>
+              </div>
+            </div>
+            <UButton
+              color="gray"
+              variant="ghost"
+              icon="i-heroicons-x-mark"
+              size="sm"
+              @click="closeVideoModal"
+            />
+          </div>
+        </template>
+        
+        <div class="space-y-4">
+          <!-- Video player -->
+          <div class="relative aspect-video bg-slate-800 rounded-lg overflow-hidden">
+            <iframe
+              :src="`https://www.youtube.com/embed/${selectedVideo.youtubeId}?autoplay=1&rel=0`"
+              :title="selectedVideo.title"
+              class="w-full h-full"
+              frameborder="0"
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              allowfullscreen
+            ></iframe>
+          </div>
+          
+          <!-- Video info -->
+          <div class="space-y-4">
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-1 bg-purple-500/20 text-purple-400 text-xs rounded-full">
+                {{ selectedVideo.platform }}
+              </span>
+              <span 
+                v-for="tag in selectedVideo.tags" 
+                :key="tag"
+                class="px-2 py-1 bg-slate-700/50 text-slate-300 text-xs rounded-full"
+              >
+                {{ tag }}
+              </span>
+            </div>
+            
+            <p class="text-slate-300 leading-relaxed">
+              {{ selectedVideo.description }}
+            </p>
+            
+            <div class="flex items-center justify-between pt-4 border-t border-slate-700">
+              <div class="text-sm text-slate-500">
+                {{ selectedVideo.createdAt.toLocaleDateString('fr-FR') }}
+              </div>
+              <NuxtLink 
+                to="/tutorials"
+                class="inline-flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium rounded-lg transition-colors"
+                @click="closeVideoModal"
+              >
+                Voir tous les tutoriels
+                <Icon name="i-heroicons-arrow-right" class="w-4 h-4 ml-2" />
+              </NuxtLink>
+            </div>
+          </div>
+        </div>
+      </UCard>
+    </UModal>
 
     <!-- Info Modal -->
     <UModal v-model="showInfoModal" :ui="{ width: 'max-w-2xl' }">
@@ -1310,28 +1526,6 @@ onMounted(() => {
       </UCard>
     </UModal>
 
-    <!-- Success Modal for Contact Form -->
-    <UModal v-model="showSuccessModal" :ui="{ width: 'max-w-md' }">
-      <UCard class="text-center p-8">
-        <div class="mb-6">
-          <div class="w-20 h-20 rounded-full bg-emerald-500/20 flex items-center justify-center mx-auto mb-4 animate-bounce">
-            <Icon name="i-heroicons-check-badge" class="w-10 h-10 text-emerald-400" />
-          </div>
-          <h3 class="text-2xl font-bold text-white mb-2">Parfait !</h3>
-          <p class="text-slate-400">
-            Votre message a été envoyé avec succès. Notre équipe vous contactera sous peu.
-          </p>
-        </div>
-        <UButton
-          color="emerald"
-          variant="solid"
-          label="Super !"
-          size="lg"
-          block
-          @click="closeModals"
-        />
-      </UCard>
-    </UModal>
   </div>
 </template>
 

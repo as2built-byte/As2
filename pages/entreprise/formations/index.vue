@@ -1,12 +1,7 @@
 <script setup lang="ts">
 /**
- * Enterprise Formations Page - Modern UI
- * 
- * Features:
- * - Beautiful cards with status badges
- * - Responsive design for mobile/tablet
- * - Modern UI with Nuxt UI components
- * - Smooth animations and transitions
+ * Enterprise Formations Page
+ * Uses entreprise layout with sidebar - styled exactly like expert/formations
  */
 
 import { 
@@ -17,7 +12,7 @@ import {
 } from '~/services/formationsClient'
 
 definePageMeta({
-    layout: 'default',
+    layout: 'entreprise',
     middleware: ['auth']
 })
 
@@ -29,7 +24,6 @@ const formations = ref<FormationWithStatus[]>([])
 const packs = ref<PackWithDetails[]>([])
 const loading = ref(true)
 const error = ref<string | null>(null)
-const searchQuery = ref('')
 
 // Filtered formations by tab
 const catalogueFormations = computed(() => 
@@ -56,105 +50,30 @@ const tabCounts = computed(() => ({
     completees: completeesFormations.value.length
 }))
 
-// Type definitions for current items
-interface CurrentItem {
-  id: string
-  type: 'pack' | 'formation'
-  title: string
-  description: string
-  status: 'available' | 'in-progress' | 'completed'
-  badge: { label: string; color: string }
-  price?: number
-  discount?: number
-  durationHours?: number
-  progress?: number
-  completedAt?: Date
-  coverUrl?: string | null
-}
-
-// Current tab items
-const currentItems = computed((): CurrentItem[] => {
-    const items: CurrentItem[] = []
-    
-    if (activeTab.value === 'catalogue') {
-        // Add packs
-        availablePacks.value.forEach((pack: any) => {
-            items.push({
-                ...pack,
-                type: 'pack',
-                title: (pack as any).name || 'Pack sans nom',
-                description: (pack as any).description || 'Description du pack',
-                status: 'available',
-                badge: { label: 'Pack', color: 'purple' },
-                price: (pack as any).price || 0,
-                discount: (pack as any).discountPercent || 0,
-                coverUrl: (pack as any).coverUrl || null,
-                id: pack.id
-            })
-        })
-        // Add formations
-        catalogueFormations.value.forEach((formation: any) => {
-            items.push({
-                ...formation,
-                type: 'formation',
-                title: formation.title,
-                description: formation.description,
-                status: 'available',
-                badge: { label: 'Formation', color: 'blue' },
-                price: formation.price,
-                durationHours: formation.durationHours,
-                coverUrl: formation.coverUrl,
-                id: formation.id
-            })
-        })
-    } else if (activeTab.value === 'en-cours') {
-        enCoursFormations.value.forEach((formation: any) => {
-            items.push({
-                ...formation,
-                type: 'formation',
-                title: formation.title,
-                description: formation.description,
-                status: 'in-progress',
-                badge: { label: 'En cours', color: 'yellow' },
-                progress: 50, // Default progress
-                coverUrl: formation.coverUrl,
-                id: formation.id
-            })
-        })
-    } else {
-        completeesFormations.value.forEach((formation: any) => {
-            items.push({
-                ...formation,
-                type: 'formation',
-                title: formation.title,
-                description: formation.description,
-                status: 'completed',
-                badge: { label: 'Terminé', color: 'green' },
-                completedAt: new Date(),
-                coverUrl: formation.coverUrl,
-                id: formation.id
-            })
-        })
+// Current tab formations
+const currentFormations = computed(() => {
+    switch (activeTab.value) {
+        case 'catalogue':
+            return catalogueFormations.value
+        case 'en-cours':
+            return enCoursFormations.value
+        case 'completees':
+            return completeesFormations.value
+        default:
+            return []
     }
-    
-    return items
 })
 
-// Filtered items based on search
-const filteredItems = computed(() => {
-    if (!searchQuery.value.trim()) return currentItems.value
-    
-    const query = searchQuery.value.toLowerCase()
-    return currentItems.value.filter(item => 
-        item.title.toLowerCase().includes(query) ||
-        item.description.toLowerCase().includes(query)
-    )
-})
+// Tabs config
+const tabs = [
+    { id: 'catalogue', label: 'Catalogue', icon: 'heroicons:book-open' },
+    { id: 'en-cours', label: 'En cours', icon: 'heroicons:clock' },
+    { id: 'completees', label: 'Complétées', icon: 'heroicons:check-badge' }
+] as const
 
 // Load formations and packs
 async function loadData() {
-    if (process.server) return;
-    if (!user.value?.uid) return;
+    if (!user.value?.uid) return
     
     loading.value = true
     error.value = null
@@ -178,327 +97,141 @@ async function loadData() {
 onMounted(() => {
     loadData()
 })
-
-// Tab configuration
-const tabs = [
-    { 
-        key: 'catalogue', 
-        label: 'Catalogue', 
-        icon: 'i-heroicons-book-open',
-        description: 'Formations et packs disponibles'
-    },
-    { 
-        key: 'en-cours', 
-        label: 'En cours', 
-        icon: 'i-heroicons-clock',
-        description: 'Formations en cours de suivi'
-    },
-    { 
-        key: 'completees', 
-        label: 'Terminées', 
-        icon: 'i-heroicons-check-badge',
-        description: 'Formations certifiées'
-    }
-] as const
-
-// Status badge variants
-const statusVariants: Record<string, { color: string; variant: string }> = {
-    'available': { color: 'blue', variant: 'soft' },
-    'in-progress': { color: 'yellow', variant: 'soft' },
-    'completed': { color: 'green', variant: 'soft' },
-    'blocked': { color: 'red', variant: 'soft' }
-}
 </script>
 
 <template>
-  <div class="min-h-full">
-    <!-- Page Header -->
-    <div class="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-800 dark:to-gray-900">
-      <div class="px-4 py-8 sm:px-6 lg:px-8">
-        <div class="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
-          <div>
-            <h1 class="text-3xl font-bold tracking-tight text-white">
-              Formations & Packs
-            </h1>
-            <p class="mt-2 text-slate-300">
-              Développez vos compétences avec nos formations BIM spécialisées
-            </p>
-          </div>
-          
-          <!-- Search -->
-          <div class="w-full sm:w-auto">
-            <UInput
-              v-model="searchQuery"
-              placeholder="Rechercher une formation..."
-              icon="i-heroicons-magnifying-glass"
-              size="lg"
-              class="w-full sm:w-80"
-            />
-          </div>
+    <div class="page-container">
+        <!-- Header -->
+        <div class="page-header">
+            <h1 class="page-title">Formations & Packs</h1>
+            <p class="page-subtitle">Consultez le catalogue et suivez vos formations</p>
         </div>
-      </div>
-    </div>
 
-    <!-- Tabs Navigation -->
-    <div class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
-      <div class="px-4 sm:px-6 lg:px-8">
-        <div class="flex space-x-8 overflow-x-auto">
-          <button
-            v-for="tab in tabs"
-            :key="tab.key"
-            @click="activeTab = tab.key"
-            class="flex items-center space-x-2 py-4 px-1 border-b-2 text-sm font-medium transition-colors whitespace-nowrap"
-            :class="[
-              activeTab === tab.key
-                ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                : 'border-transparent text-slate-500 hover:text-slate-300 hover:border-gray-300'
-            ]"
-          >
-            <Icon :name="tab.icon" class="h-5 w-5" />
-            <span>{{ tab.label }}</span>
-            <UBadge
-              v-if="tabCounts[tab.key] > 0"
-              :color="activeTab === tab.key ? 'blue' : 'gray'"
-              variant="soft"
-              size="xs"
-              class="ml-2"
-            >
-              {{ tabCounts[tab.key] }}
-            </UBadge>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- Main Content -->
-    <div class="px-4 py-6 sm:px-6 lg:px-8">
-      <!-- Loading State with Skeletons -->
-      <div v-if="loading" class="space-y-6">
-        <!-- Skeleton Header -->
-        <div class="space-y-4">
-          <USkeleton class="h-8 w-48" />
-          <USkeleton class="h-4 w-96" />
-        </div>
-        
-        <!-- Skeleton Tabs -->
-        <div class="flex space-x-8 border-b border-gray-200 dark:border-gray-700">
-          <USkeleton v-for="i in 3" :key="i" class="h-12 w-24" />
-        </div>
-        
-        <!-- Skeleton Cards Grid -->
-        <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <div v-for="i in 6" :key="i" class="space-y-4">
-            <USkeleton class="h-48 w-full rounded-t-lg" />
-            <div class="p-4 space-y-3">
-              <USkeleton class="h-6 w-3/4" />
-              <USkeleton class="h-4 w-full" />
-              <USkeleton class="h-4 w-2/3" />
-              <div class="flex justify-between">
-                <USkeleton class="h-4 w-16" />
-                <USkeleton class="h-6 w-20" />
-              </div>
+        <!-- Tabs -->
+        <div class="bg-white rounded-xl border border-slate-200 mb-6">
+            <div class="flex border-b border-slate-200">
+                <button
+                    v-for="tab in tabs"
+                    :key="tab.id"
+                    type="button"
+                    class="flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors relative"
+                    :class="activeTab === tab.id 
+                        ? 'text-blue-600 border-b-2 border-blue-600 -mb-px bg-blue-50/50' 
+                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'"
+                    @click="activeTab = tab.id"
+                >
+                    <Icon :name="tab.icon" class="w-4 h-4" />
+                    {{ tab.label }}
+                    <span 
+                        v-if="tabCounts[tab.id] > 0"
+                        class="ml-1 px-2 py-0.5 text-xs rounded-full"
+                        :class="activeTab === tab.id ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-600'"
+                    >
+                        {{ tabCounts[tab.id] }}
+                    </span>
+                </button>
             </div>
-            <div class="p-4">
-              <USkeleton class="h-10 w-full" />
+        </div>
+
+        <!-- Loading -->
+        <div v-if="loading" class="state-loading">
+            <div class="spinner-lg text-blue-600"></div>
+        </div>
+
+        <!-- Error -->
+        <div v-else-if="error" class="alert-error fade-in">
+            <Icon name="heroicons:exclamation-circle" class="w-5 h-5 flex-shrink-0 mt-0.5" />
+            <div class="flex-1">
+                <span>{{ error }}</span>
+                <button 
+                    type="button"
+                    class="ml-4 text-red-700 underline font-medium text-sm"
+                    @click="loadData"
+                >
+                    Réessayer
+                </button>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Error State -->
-      <div v-else-if="error" class="rounded-lg bg-red-50 dark:bg-red-900/20 p-6 text-center">
-        <Icon name="i-heroicons-exclamation-circle" class="h-12 w-12 text-red-600 mx-auto mb-4" />
-        <h3 class="text-lg font-medium text-red-800 dark:text-red-200 mb-2">
-          Erreur de chargement
-        </h3>
-        <p class="text-red-600 dark:text-red-300 mb-4">{{ error }}</p>
-        <UButton @click="loadData" color="red" variant="soft">
-          Réessayer
-        </UButton>
-      </div>
-
-      <!-- Content -->
-      <div v-else>
-        <!-- Empty State -->
-        <div v-if="filteredItems.length === 0" class="text-center py-12">
-          <Icon name="i-heroicons-book-open" class="h-16 w-16 text-gray-400 mx-auto mb-4" />
-          <h3 class="text-lg font-medium text-white mb-2">
-            {{ searchQuery ? 'Aucun résultat trouvé' : 'Aucune formation disponible' }}
-          </h3>
-          <p class="text-slate-300">
-            {{ searchQuery ? 'Essayez une autre recherche' : 'Revenez plus tard pour découvrir nos nouvelles formations' }}
-          </p>
         </div>
 
-        <!-- Cards Grid -->
-        <div v-else class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <UCard
-            v-for="item in filteredItems"
-            :key="item.id"
-            class="group hover:shadow-lg transition-all duration-300 transform hover:-translate-y-1 hover:border-blue-500/50 border-2 border-transparent"
-            :ui="{
-              body: { padding: 'p-0' },
-              header: { padding: 'p-4' },
-              footer: { padding: 'p-4' },
-              base: 'transition-all duration-300 hover:border-blue-500/50'
-            }"
-          >
-            <!-- Card Header with Image -->
-            <template #header>
-              <div class="relative">
-                <img
-                  :src="item.coverUrl || '/images/default-formation.svg'"
-                  :alt="item.title"
-                  class="h-48 w-full object-cover rounded-t-lg transition-transform duration-300 group-hover:scale-105"
-                  @error="(e: Event) => { const target = e.target as HTMLImageElement; target.src = '/images/default-formation.svg' }"
-                />
-                <div class="absolute top-2 right-2">
-                  <UBadge
-                    :color="item.badge.color"
-                    variant="solid"
-                    size="sm"
-                    class="shadow-lg"
-                  >
-                    {{ item.badge.label }}
-                  </UBadge>
+        <!-- Content -->
+        <div v-else>
+            <!-- Catalogue Tab Content -->
+            <template v-if="activeTab === 'catalogue'">
+                <!-- Packs Section -->
+                <div v-if="availablePacks.length > 0" class="mb-8">
+                    <div class="mb-4">
+                        <h3 class="text-lg font-bold text-slate-800">Packs - Économisez jusqu'à {{ Math.max(...availablePacks.map(p => p.discountPercent)) }}%</h3>
+                        <p class="text-sm text-slate-500">Regroupez vos formations et bénéficiez de réductions</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <PackCard
+                            v-for="pack in availablePacks"
+                            :key="pack.id"
+                            :pack="pack"
+                            link-prefix="/entreprise/packs"
+                        />
+                    </div>
                 </div>
-                
-                <!-- Status Badge -->
-                <div class="absolute top-2 left-2">
-                  <UBadge
-                    :color="statusVariants[item.status]?.color || 'gray'"
-                    :variant="statusVariants[item.status]?.variant || 'soft'"
-                    size="sm"
-                    class="shadow-lg"
-                  >
-                    {{ item.status === 'available' ? 'Disponible' : 
-                       item.status === 'in-progress' ? 'En cours' : 
-                       item.status === 'completed' ? 'Terminé' : 'Bloqué' }}
-                  </UBadge>
+
+                <!-- Formations Section -->
+                <div v-if="catalogueFormations.length > 0">
+                    <div class="mb-4">
+                        <h3 class="text-lg font-bold text-slate-800">Formations</h3>
+                        <p class="text-sm text-slate-500">Choisissez la formation qui vous convient</p>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <FormationCard
+                            v-for="formation in catalogueFormations"
+                            :key="formation.id"
+                            :formation="formation"
+                            :show-status="false"
+                            link-prefix="/entreprise/formations"
+                        />
+                    </div>
                 </div>
-              </div>
+
+                <!-- Empty State for Catalogue -->
+                <div v-if="catalogueFormations.length === 0 && availablePacks.length === 0" class="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                    <Icon name="heroicons:book-open" class="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                    <h3 class="text-lg font-medium text-slate-800">Aucune formation disponible</h3>
+                    <p class="mt-2 text-slate-500">De nouvelles formations seront bientôt disponibles.</p>
+                </div>
             </template>
 
-            <!-- Card Body -->
-            <div class="p-4">
-              <h3 class="text-lg font-semibold text-white mb-2 line-clamp-2 group-hover:text-blue-400 transition-colors duration-200">
-                {{ item.title }}
-              </h3>
-              <p class="text-slate-300 text-sm mb-4 line-clamp-3">
-                {{ item.description }}
-              </p>
-
-              <!-- Additional Info -->
-              <div class="space-y-2">
-                <!-- Price for available items -->
-                <div v-if="item.status === 'available' && item.price" class="flex items-center justify-between">
-                  <span class="text-sm text-slate-400">Prix</span>
-                  <div class="text-right">
-                    <span v-if="item.discount" class="text-sm text-slate-500 line-through">
-                      {{ item.price }}€
-                    </span>
-                    <span class="text-lg font-bold text-blue-400 ml-2">
-                      {{ Math.round(item.price * (1 - (item.discount || 0) / 100)) }}€
-                    </span>
-                    <UBadge v-if="item.discount" color="red" variant="soft" size="xs" class="ml-2">
-                      -{{ item.discount }}%
-                    </UBadge>
-                  </div>
+            <!-- En cours / Complétées Tab Content -->
+            <template v-else>
+                <!-- Formations Grid -->
+                <div v-if="currentFormations.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <FormationCard
+                        v-for="formation in currentFormations"
+                        :key="formation.id"
+                        :formation="formation"
+                        :show-status="true"
+                        link-prefix="/entreprise/formations"
+                    />
                 </div>
 
-                <!-- Progress for in-progress items -->
-                <div v-else-if="item.status === 'in-progress'" class="space-y-2">
-                  <div class="flex items-center justify-between">
-                    <span class="text-sm text-slate-400">Progression</span>
-                    <span class="text-sm font-medium text-blue-400">
-                      {{ item.progress || 0 }}%
-                    </span>
-                  </div>
-                  <UProgress
-                    :value="item.progress || 0"
-                    color="blue"
-                    class="h-2"
-                  />
+                <!-- Empty State -->
+                <div v-else class="bg-white rounded-xl border border-slate-200 p-12 text-center">
+                    <template v-if="activeTab === 'en-cours'">
+                        <Icon name="heroicons:clock" class="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                        <h3 class="text-lg font-medium text-slate-800">Aucune formation en cours</h3>
+                        <p class="mt-2 text-slate-500">Inscrivez-vous à une formation pour la voir ici.</p>
+                        <button 
+                            type="button"
+                            class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                            @click="activeTab = 'catalogue'"
+                        >
+                            Voir le catalogue
+                        </button>
+                    </template>
+                    <template v-else>
+                        <Icon name="heroicons:check-badge" class="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                        <h3 class="text-lg font-medium text-slate-800">Aucune formation complétée</h3>
+                        <p class="mt-2 text-slate-500">Vos formations certifiées apparaîtront ici.</p>
+                    </template>
                 </div>
-
-                <!-- Completion date for completed items -->
-                <div v-else-if="item.status === 'completed'" class="flex items-center justify-between">
-                  <span class="text-sm text-slate-400">Terminée le</span>
-                  <span class="text-sm text-green-400">
-                    {{ new Date().toLocaleDateString('fr-FR') }}
-                  </span>
-                </div>
-
-                <!-- Duration for catalogue items -->
-                <div v-if="item.durationHours" class="flex items-center justify-between">
-                  <span class="text-sm text-slate-400">Durée</span>
-                  <span class="text-sm text-slate-200">
-                    {{ item.durationHours }}h
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <!-- Card Footer -->
-            <template #footer>
-              <div class="flex space-x-2">
-                <UButton
-                  v-if="item.status === 'available'"
-                  color="blue"
-                  variant="solid"
-                  size="sm"
-                  class="flex-1 transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                  @click="navigateTo(item.type === 'pack' ? `/entreprise/packs/${item.id}` : `/entreprise/formations/${item.id}`)"
-                >
-                  {{ item.type === 'pack' ? 'Voir le pack' : 'S\'inscrire' }}
-                </UButton>
-                
-                <UButton
-                  v-else-if="item.status === 'in-progress'"
-                  color="blue"
-                  variant="outline"
-                  size="sm"
-                  class="flex-1 transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                  @click="navigateTo(`/entreprise/formations/${item.id}`)"
-                >
-                  Continuer
-                </UButton>
-                
-                <UButton
-                  v-else-if="item.status === 'completed'"
-                  color="green"
-                  variant="outline"
-                  size="sm"
-                  class="flex-1 transition-all duration-200 hover:scale-105 hover:shadow-lg"
-                  @click="navigateTo(`/entreprise/formations/${item.id}/certificate`)"
-                >
-                  Voir le certificat
-                </UButton>
-              </div>
             </template>
-          </UCard>
         </div>
-      </div>
     </div>
-  </div>
 </template>
-
-<style scoped>
-.line-clamp-2 {
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  line-clamp: 2;
-  -webkit-line-clamp: 2;
-}
-
-.line-clamp-3 {
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  line-clamp: 3;
-  -webkit-line-clamp: 3;
-}
-</style>

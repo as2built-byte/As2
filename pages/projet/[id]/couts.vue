@@ -651,7 +651,7 @@ async function exportToPDF() {
         // Pied de page
         pdf.setFontSize(8)
         pdf.setTextColor(100, 100, 100)
-        const footerText = 'AS2BUILT - Contact: 05 56514162 | contact@as2built.com'
+        const footerText = 'AS2BUILT - Contact: 05 56514162 | info@as2built.com'
         pdf.text(footerText, pageWidth / 2, pageHeight - 10, { align: 'center' })
 
         pdf.save(`Rapport-Financier-${projectId.value}.pdf`)

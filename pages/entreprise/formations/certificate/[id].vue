@@ -142,7 +142,7 @@ onMounted(() => {
                             <!-- Header -->
                             <div class="text-center mb-6 md:mb-10">
                                 <img 
-                                    src="~/assets/images/logo.jpeg" 
+                                    src="/images/logo.jpeg" 
                                     alt="As2Built"
                                     class="w-16 h-16 md:w-20 md:h-20 mx-auto rounded-xl object-cover shadow-lg mb-3"
                                 />
